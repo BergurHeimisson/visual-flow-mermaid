@@ -20,17 +20,40 @@ function q(text: string): string {
   return `"${text.replace(/"/g, '#quot;').replace(/\n/g, '<br/>')}"`;
 }
 
-/** A label safe to sit bare between `--` and `-->`. Anything else (an arrow, a pipe, a
- *  brace) goes through the quoted `-->|"..."|` form instead, where `q()`'s escaping
- *  applies. Both forms tokenize back to the same `edge` token, which the parser
- *  discards, so this choice is purely about what a renderer shows. */
-const SIMPLE_LABEL = /^[\w ?!.,'-]+$/;
+/** A label safe to sit bare between `--` and `-->`. Deliberately excludes `-`: Mermaid
+ *  reserves `--`, `-->`, `--o` and friends inside an unquoted label, so `wait--retry`
+ *  emitted bare would be a link token sitting inside a link. Anything outside this class
+ *  goes through the quoted `-->|"..."|` form. Both forms tokenize back to the same `edge`
+ *  token, which the parser discards, so the choice only affects what a renderer shows. */
+const SIMPLE_LABEL = /^[\w ?!.,']+$/;
+
+/** Quote text for the `-->|"..."|` edge form. That form is delimited by `|`, so a literal
+ *  pipe has to become its entity code or it closes the region early — `q()` alone is not
+ *  enough here, since it only handles `"` and newlines. */
+function qEdge(text: string): string {
+  return q(text.replace(/\|/g, '#124;'));
+}
 
 function edgeLine(from: string, to: string, label?: string): string {
   if (label === undefined) return `${from} --> ${to}`;
   return SIMPLE_LABEL.test(label)
     ? `${from} -- ${label} --> ${to}`
-    : `${from} -->|${q(label)}| ${to}`;
+    : `${from} -->|${qEdge(label)}| ${to}`;
+}
+
+/** Several arms can converge on one target carrying the same label — two empty arms of a
+ *  decision, or two empty fork columns, which is what the palette's default fork is. Each
+ *  would otherwise emit a byte-identical edge and Mermaid would draw it twice. */
+function edgeLines(tails: Tail[], to: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tails) {
+    const key = JSON.stringify([t.from, t.label ?? null]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(edgeLine(t.from, to, t.label));
+  }
+  return out;
 }
 
 function indent(lines: string[]): string[] {
@@ -51,7 +74,7 @@ function emitSeq(seq: Block[], ctx: { n: number }): SeqResult {
 
   for (const block of seq) {
     const b = emitBlock(block, ctx);
-    for (const t of pending) lines.push(edgeLine(t.from, b.entry, t.label));
+    lines.push(...edgeLines(pending, b.entry));
     lines.push(...b.lines);
     if (entry === undefined) entry = b.entry;
     pending = b.tails;
@@ -130,7 +153,7 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
     }
     case 'fork': {
       const joinId = `join_${id}`;
-      const lines = ['%% fork', `${id}@{ shape: fork }`];
+      const lines = [`%% fork (${block.branches.length})`, `${id}@{ shape: fork }`];
       const tails: Tail[] = [];
       block.branches.forEach((col, i) => {
         if (i > 0) lines.push('%% fork again');
@@ -146,14 +169,14 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
         lines.push(...indent(body.lines));
       });
       lines.push('%% end fork', `${joinId}@{ shape: fork }`);
-      for (const t of tails) lines.push(edgeLine(t.from, joinId, t.label));
+      lines.push(...edgeLines(tails, joinId));
       return { lines, entry: id, tails: [{ from: joinId }] };
     }
     case 'while': {
       const lines = ['%% while', `${id}{${q(block.cond)}}`, `%% do${opt(block.isLabel)}`];
       const body = emitSeq(block.body, ctx);
       if (body.entry) body.lines.unshift(edgeLine(id, body.entry, block.isLabel));
-      for (const t of body.tails) body.lines.push(edgeLine(t.from, id, t.label));
+      body.lines.push(...edgeLines(body.tails, id));
       lines.push(...indent(body.lines));
       lines.push(`%% endwhile${opt(block.endLabel)}`);
       return { lines, entry: id, tails: [{ from: id, label: block.endLabel }] };
@@ -164,7 +187,7 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
       lines.push(...indent(body.lines));
       lines.push(`%% repeat while${opt(block.isLabel)}`);
       lines.push(`${id}{${q(block.cond)}}`);
-      for (const t of body.tails) lines.push(edgeLine(t.from, id, t.label));
+      lines.push(...edgeLines(body.tails, id));
       // An empty body has no node to loop back to, so the back edge is omitted rather
       // than pointing the diamond at itself; the construct's entry is then the diamond.
       if (body.entry) lines.push(edgeLine(id, body.entry, block.isLabel));

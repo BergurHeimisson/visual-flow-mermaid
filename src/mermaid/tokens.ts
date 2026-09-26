@@ -6,7 +6,7 @@
  * elseif chain and a nested if produce identical topology, so it rides alongside as
  * inert `%%` markers: `%% if` / `%% then (l)` / `%% elseif` / `%% else (l)` / `%% endif`,
  * `%% while` / `%% do (l)` / `%% endwhile (l)`, `%% repeat` / `%% repeat while (l)`, and
- * `%% fork` / `%% fork again` / `%% end fork`. Every condition lives in the diamond that
+ * `%% fork (n)` / `%% fork again` / `%% end fork`. Every condition lives in the diamond that
  * follows its opening marker; markers carry only the labels. Comments are inert to any
  * renderer, so the file stays plain, valid, renderable Mermaid throughout.
  *
@@ -31,7 +31,7 @@ export type Token =
   | { type: 'markEndwhile'; label?: string; line: number }
   | { type: 'markRepeat'; line: number }
   | { type: 'markRepeatWhile'; label?: string; line: number }
-  | { type: 'markFork'; line: number }
+  | { type: 'markFork'; count?: number; line: number }
   | { type: 'markForkAgain'; line: number }
   | { type: 'markEndFork'; line: number }
   | { type: 'edge'; from: string; to: string; line: number }
@@ -60,7 +60,7 @@ const RE = {
   markElse:   /^%%\s*else\s*(?:\((.*)\))?$/i,
   markEndif:  /^%%\s*endif$/i,
   markForkAgain: /^%%\s*fork\s+again$/i,
-  markFork:      /^%%\s*fork$/i,
+  markFork:      /^%%\s*fork(?:\s*\((\d+)\))?$/i,
   markEndFork:   /^%%\s*end\s+fork$/i,
   markWhile:    /^%%\s*while$/i,
   markDo:       /^%%\s*do\s*(?:\((.*)\))?$/i,
@@ -125,7 +125,11 @@ export function tokenize(text: string): Token[] {
 
 
     if (RE.markForkAgain.test(t)) { out.push({ type: 'markForkAgain', line }); continue; }
-    if (RE.markFork.test(t)) { out.push({ type: 'markFork', line }); continue; }
+    const markFork = RE.markFork.exec(t);
+    if (markFork) {
+      out.push({ type: 'markFork', count: markFork[1] === undefined ? undefined : Number(markFork[1]), line });
+      continue;
+    }
     if (RE.markEndFork.test(t)) { out.push({ type: 'markEndFork', line }); continue; }
 
     if (RE.markWhile.test(t)) { out.push({ type: 'markWhile', line }); continue; }

@@ -23,10 +23,11 @@ dialect on top of standard flowchart syntax:
   as a real flowchart anywhere — GitHub, mermaid.live, and so on. **The fork bar needs
   Mermaid v11.3.0+**; everything else is core syntax.
 - The document *tree* cannot be recovered from that graph, because an `elseif` chain and a
-  nested `if` produce identical topology and an empty branch produces no edge at all. So the
+  nested `if` produce identical topology, and a branch label has nowhere to live once the
+  arm it belongs to is empty. So the
   tree rides alongside as inert `%%` markers — `%% if` / `%% then (l)` / `%% elseif` /
   `%% else (l)` / `%% endif`, `%% while` / `%% do (l)` / `%% endwhile (l)`, `%% repeat` /
-  `%% repeat while (l)`, and `%% fork` / `%% fork again` / `%% end fork`. Every condition
+  `%% repeat while (l)`, and `%% fork (n)` / `%% fork again` / `%% end fork`. Every condition
   lives in the diamond that follows its opening marker; markers carry only the labels. An
   attached note rides along the same way. Comments are inert to any renderer, so the file
   stays plain, valid, renderable Mermaid throughout.
@@ -56,8 +57,17 @@ n5["Invoice"]
 
 Because the dialect is a fixed subset (like PlantUML's own accepted keyword spellings), a
 node shape this app doesn't recognise is refused on import rather than silently dropped —
-see "Opening existing `.mmd` files" below. Since the markers *are* the structure, a
-construct that has lost one is refused too, rather than parsed into a different diagram.
+see "Opening existing `.mmd` files" below.
+
+Since the markers *are* the structure, losing one usually refuses the import: every marker
+a construct needs is required, so a missing `%% then`, `%% do`, `%% repeat while`,
+`%% endif`, `%% endwhile` or `%% end fork` aborts, and so does a diamond with no opening
+marker in front of it. `%% fork` carries its column count (`%% fork (3)`) so that a dropped
+`%% fork again` is caught rather than silently merging two parallel columns into one.
+
+**The one exception is `%% else`.** Delete it by hand and the else-body is absorbed into the
+arm above it — a valid document, but a different one. There is no redundancy in the file
+that would catch it. If you hand-edit a `.mmd`, that is the line to be careful with.
 
 
 ## What you can do

@@ -230,11 +230,32 @@ test('a missing `%% repeat while` refuses rather than dropping the condition', (
 
 test('a fork whose `%% fork again` went missing is refused, not silently merged', () => {
   const r = parse(
-    'start(("start"))\n%% fork\nf@{ shape: fork }\n  a["A"]\n  b["B"]\n'
+    'start(("start"))\n%% fork (2)\nf@{ shape: fork }\n  a["A"]\n  b["B"]\n'
     + '%% end fork\njoin_f@{ shape: fork }\n',
   );
   expect(r.ok).toBe(false);
-  if (!r.ok) expect(r.error.message).toMatch(/two branches|fork again/i);
+  if (!r.ok) expect(r.error.message).toMatch(/2 branches|fork again/i);
+});
+
+// A count check, not a plausibility check: dropping one `%% fork again` from a three-column
+// fork leaves two columns, which a `>= 2` guard would happily accept while one parallel
+// task had silently been appended to another.
+test('a three-column fork that lost one `%% fork again` is refused', () => {
+  const r = parse(
+    'start(("start"))\n%% fork (3)\nf@{ shape: fork }\n  a["F"]\n  b["G"]\n'
+    + '%% fork again\n  c["H"]\n%% end fork\njoin_f@{ shape: fork }\n',
+  );
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/3 branches/i);
+});
+
+test('a fork with its full complement of columns parses', () => {
+  const doc = ok(
+    'start(("start"))\n%% fork (3)\nf@{ shape: fork }\n  a["F"]\n'
+    + '%% fork again\n  b["G"]\n%% fork again\n  c["H"]\n%% end fork\njoin_f@{ shape: fork }\n',
+  ).doc;
+  const block = doc.body[0];
+  expect(block.kind === 'fork' && block.branches).toHaveLength(3);
 });
 
 // The e2e fixtures are hand-written in this dialect. Checking them here means the fast

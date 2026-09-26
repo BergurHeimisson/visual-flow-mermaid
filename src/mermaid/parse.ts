@@ -155,9 +155,17 @@ export function parse(text: string): ParseResult {
         // Every other missing marker is caught by an `expect` above. A dropped
         // `%% fork again` is the one that would not be: its column would simply be
         // absorbed into the previous one, silently turning parallel work into
-        // sequential. A fork always has at least two branches (`edits.ts` refuses to
-        // remove below two), so a single branch means a marker went missing.
-        if (branches.length < 2) {
+        // sequential. Counting is not enough on its own -- losing one column of three
+        // still leaves a plausible two -- so the opening marker carries the column count
+        // and it has to match exactly. A file written without the count (hand-written to
+        // an older spelling of this dialect) falls back to the weaker `at least two`.
+        if (token.count !== undefined) {
+          if (branches.length !== token.count) {
+            throw new Fail({ kind: 'syntax', line: token.line,
+              message: `This fork declares ${token.count} branches but has ${branches.length}; `
+                + 'a `%% fork again` is missing.' });
+          }
+        } else if (branches.length < 2) {
           throw new Fail({ kind: 'syntax', line: token.line,
             message: 'A fork needs at least two branches; a `%% fork again` is missing.' });
         }

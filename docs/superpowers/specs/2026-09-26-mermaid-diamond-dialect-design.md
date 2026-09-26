@@ -62,9 +62,9 @@ file must carry them.
 
 **B. Pure graph, recover the tree from topology.** No structural comments; the
 parser recovers structure by post-dominator analysis. Rejected: `if A / elseif B
-/ else C` and `if A / else { if B else C }` produce byte-identical graphs, and
-an empty branch emits no arrow at all. The model distinguishes these cases and
-the graph cannot, so the headline property test would weaken from "equal" to
+/ else C` and `if A / else { if B else C }` produce byte-identical graphs, and a
+branch label has nowhere to live once its arm is empty. The model distinguishes
+these cases and the graph cannot, so the headline property test would weaken from "equal" to
 "equal after normalisation" and reopening a file could silently reshape it.
 
 **C. Diamond inside the subgraph.** Smallest diff, but every branch still
@@ -85,7 +85,7 @@ visual nesting the subgraphs gave for free.
 | `if` | `%% if` · `%% then (l)` · `%% elseif` · `%% else (l)` · `%% endif` | `thenLabel`, `elseLabel` |
 | `while` | `%% while` · `%% do (l)` · `%% endwhile (l)` | `isLabel`, `endLabel` |
 | `repeat` | `%% repeat` · `%% repeat while (l)` | `isLabel` |
-| `fork` | `%% fork` · `%% fork again` · `%% end fork` | none |
+| `fork` | `%% fork (n)` · `%% fork again` · `%% end fork` | column count `n` |
 
 Every `cond` comes from a diamond node, never from a marker. A label is omitted
 from its marker entirely when the model field is `undefined`, matching the
@@ -185,6 +185,22 @@ cosmetic fallback. And `%% note`, `%% end note` and the `%%{...}%%` directives
 keep their current precedence *above* the reserved check, so `%% end note` is
 still a note terminator and never a malformed `end fork` — the reserved phrases
 are matched whole, not by first word alone.
+
+> **NOT IMPLEMENTED — superseded during execution (2026-09-26).** The reserved
+> namespace above does not exist in the code. It cannot catch its own motivating
+> example (`%% endwile` opens with no reserved keyword, so a keyword-prefix list
+> never fires on it), and it *would* fire on ordinary prose such as
+> `%% do not edit` or `%% if you change this`, refusing otherwise-valid files —
+> contradicting this section's own promise that unknown comments stay cosmetic.
+>
+> What was implemented instead: every marker a construct needs is `expect`ed, so
+> a missing `%% then`, `%% do`, `%% repeat while`, `%% endif`, `%% endwhile` or
+> `%% end fork`, and a diamond with no opening marker, all refuse loudly. For
+> `fork`, where a dropped `%% fork again` would otherwise merge two parallel
+> columns into one, the opening marker carries the column count (`%% fork (3)`)
+> and the parser requires an exact match. A dropped `%% else` remains the one
+> marker whose absence yields a valid but different document; that is stated in
+> the README rather than hidden.
 
 An `@{ shape: X }` where `X` is not `fork` becomes `unsupported`, consistent with
 the existing treatment of any unrecognised node shape.

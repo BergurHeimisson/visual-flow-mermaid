@@ -83,6 +83,58 @@ test('an empty fork column connects the split bar straight to the join bar', () 
   expect(serialize(doc)).toContain('%% end fork\njoin_n1@{ shape: fork }\nn1 --> join_n1\nn2 --> join_n1');
 });
 
+// A fork straight from the palette is `branches: [[], []]` (see factory.ts), so this is the
+// very first thing the text panel shows after clicking Fork. Both empty columns converge on
+// the join bar with the same label, and Mermaid would draw the identical edge twice.
+test('two empty fork columns converge on the join bar without duplicating the edge', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'fork', branches: [[], []] },
+    { id: '2', kind: 'action', label: 'after' },
+  ]};
+  const out = serialize(doc);
+  expect(out.match(/n1 --> join_n1/g)).toHaveLength(1);
+});
+
+test('two empty decision arms converge without duplicating an unlabelled edge', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'if', branches: [{ cond: 'c?', body: [] }], elseBody: [] },
+    { id: '2', kind: 'action', label: 'after' },
+  ]};
+  const out = serialize(doc);
+  expect(out.match(/n1 --> n2/g)).toHaveLength(1);
+});
+
+// `-` was in the bare-label allowlist, so `wait--retry` was emitted between `--` and `-->`
+// — a link token sitting inside a link. Mermaid reserves `--` in unquoted labels.
+test('a label containing a link delimiter takes the quoted form, not the bare one', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'if',
+      branches: [{ cond: 'c?', thenLabel: 'wait--retry', body: [{ id: '2', kind: 'action', label: 'x' }] }] },
+  ]};
+  const out = serialize(doc);
+  expect(out).toContain('n1 -->|"wait--retry"| n2');
+  expect(out).not.toContain('-- wait--retry -->');
+});
+
+// The quoted fallback is delimited by `|`, so a `|` in the label has to be escaped or it
+// closes the delimited region early.
+test('a pipe in a label is escaped inside the quoted edge form', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'if',
+      branches: [{ cond: 'c?', thenLabel: 'a|b', body: [{ id: '2', kind: 'action', label: 'x' }] }] },
+  ]};
+  expect(serialize(doc)).toContain('n1 -->|"a#124;b"| n2');
+});
+
+// The parser cannot tell a 3-column fork that lost a `%% fork again` from a genuine
+// 2-column one, so the column count travels in the opening marker.
+test('the fork marker carries its column count', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'fork', branches: [[], [], []] },
+  ]};
+  expect(serialize(doc)).toContain('%% fork (3)\nn1@{ shape: fork }');
+});
+
 test('quotes a branch label that would otherwise break the arrow', () => {
   const doc: Doc = { preamble: [], body: [
     { id: '1', kind: 'if',
@@ -127,7 +179,7 @@ test('serializes a fork as split and join bars', () => {
     ] },
   ]};
   expect(serialize(doc)).toContain(
-    '%% fork\nn1@{ shape: fork }\n  n1 --> n2\n  n2["left"]\n%% fork again\n  n1 --> n3\n  n3["right"]\n'
+    '%% fork (2)\nn1@{ shape: fork }\n  n1 --> n2\n  n2["left"]\n%% fork again\n  n1 --> n3\n  n3["right"]\n'
     + '%% end fork\njoin_n1@{ shape: fork }\nn2 --> join_n1\nn3 --> join_n1\n',
   );
 });
@@ -137,7 +189,7 @@ test('an empty fork branch emits no edge to nothing', () => {
     { id: '1', kind: 'fork', branches: [[], [{ id: '2', kind: 'action', label: 'right' }]] },
   ]};
   const out = serialize(doc);
-  expect(out).toContain('%% fork\nn1@{ shape: fork }\n%% fork again\n  n1 --> n2\n');
+  expect(out).toContain('%% fork (2)\nn1@{ shape: fork }\n%% fork again\n  n1 --> n2\n');
   expect(out).not.toMatch(/n1 --> *$/m);
 });
 

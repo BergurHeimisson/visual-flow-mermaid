@@ -11,8 +11,8 @@ function ok(text: string) {
 test('parses a decision into branches and an else arm', () => {
   const doc = ok(
     'flowchart TD\nstart(("start"))\na["A"]\n'
-    + 'subgraph if_x ["if (c?) then (yes)"]\n  b["B"]\nend\n'
-    + 'subgraph else_x ["else (no)"]\n  c["C"]\nend\n'
+    + '%% if\nx{"c?"}\n%% then (yes)\n  b["B"]\n'
+    + '%% else (no)\n  c["C"]\n%% endif\n'
     + 's1(("stop"))\n',
   ).doc;
   expect(doc.body).toHaveLength(3);
@@ -26,11 +26,17 @@ test('parses a decision into branches and an else arm', () => {
 test('parses elseif chains in order', () => {
   const doc = ok(
     'start(("start"))\n'
-    + 'subgraph if_x ["if (a?) then"]\n  a["A"]\nend\n'
-    + 'subgraph elseif_x_1 ["elseif (b?) then"]\n  b["B"]\nend\n',
+    + '%% if\nx{"a?"}\n%% then\n  a["A"]\n'
+    + '%% elseif\ny{"b?"}\n%% then\n  b["B"]\n%% endif\n',
   ).doc;
   const block = doc.body[0];
   expect(block.kind === 'if' && block.branches.map((b) => b.cond)).toEqual(['a?', 'b?']);
+});
+
+test('refuses a diamond that does not follow an opening marker', () => {
+  const r = parse('start(("start"))\nx{"c?"}\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/decision must follow/i);
 });
 
 test('parses loops and fork', () => {
@@ -71,7 +77,7 @@ test('refuses a structural construct it cannot represent', () => {
 });
 
 test('reports a syntax error for an unclosed decision', () => {
-  const r = parse('start(("start"))\nsubgraph if_x ["if (c?) then"]\n  a["A"]\n');
+  const r = parse('start(("start"))\n%% if\nx{"c?"}\n%% then\n  a["A"]\n');
   expect(r.ok).toBe(false);
   if (!r.ok) expect(r.error.kind).toBe('syntax');
 });
@@ -93,11 +99,11 @@ test('round-trips a document written by the serializer', () => {
 
 test('refuses an unsupported construct nested deep inside an if inside a while', () => {
   const text = 'start(("start"))\nsubgraph while_x ["while (m?) is (yes)"]\n'
-    + 'subgraph if_x ["if (c?) then"]\npartition "P" {\na["A"]\n}\nend\nend\n';
+    + '%% if\nx{"c?"}\n%% then\npartition "P" {\na["A"]\n}\n%% endif\nend\n';
   const r = parse(text);
   expect(r.ok).toBe(false);
   if (!r.ok) {
-    expect(r.error).toMatchObject({ kind: 'unsupported', line: 4, construct: 'partition' });
+    expect(r.error).toMatchObject({ kind: 'unsupported', line: 6, construct: 'partition' });
   }
 });
 
@@ -117,7 +123,7 @@ test('reports a syntax error for a stray note rather than dropping it', () => {
   expect(first.ok).toBe(false);
   if (!first.ok) expect(first.error.kind).toBe('syntax');
 
-  const afterIf = parse('start(("start"))\nsubgraph if_x ["if (c?) then"]\n  a["A"]\nend\n%% note right: hi\n');
+  const afterIf = parse('start(("start"))\n%% if\nx{"c?"}\n%% then\n  a["A"]\n%% endif\n%% note right: hi\n');
   expect(afterIf.ok).toBe(false);
   if (!afterIf.ok) expect(afterIf.error.kind).toBe('syntax');
 
@@ -133,20 +139,22 @@ test('reports a syntax error for a stray closing `end` at the top level', () => 
 });
 
 test('reports the last real token line for an unterminated if, not a hardcoded 1', () => {
-  const r = parse('start(("start"))\nsubgraph if_x ["if (c?) then"]\n  a["A"]\n');
+  const r = parse('start(("start"))\n%% if\nx{"c?"}\n%% then\n  a["A"]\n');
   expect(r.ok).toBe(false);
   if (!r.ok) {
     expect(r.error.kind).toBe('syntax');
     expect(r.error.line).toBeGreaterThan(1);
-    expect(r.error.line).toBe(3);
+    expect(r.error.line).toBe(5);
   }
 
-  const nested = parse('start(("start"))\nsubgraph if_x ["if (a?) then"]\nsubgraph if_y ["if (b?) then"]\n  a["A"]\n');
+  const nested = parse(
+    'start(("start"))\n%% if\nx{"a?"}\n%% then\n%% if\ny{"b?"}\n%% then\n  a["A"]\n',
+  );
   expect(nested.ok).toBe(false);
   if (!nested.ok) {
     expect(nested.error.kind).toBe('syntax');
     expect(nested.error.line).toBeGreaterThan(1);
-    expect(nested.error.line).toBe(4);
+    expect(nested.error.line).toBe(8);
   }
 });
 

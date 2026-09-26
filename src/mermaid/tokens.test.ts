@@ -24,18 +24,18 @@ test('reads an edge but does not classify it as any node kind', () => {
   expect(tokenize('a --> b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
 });
 
-test('reads a decision subgraph with and without a then-label', () => {
-  expect(tokenize('subgraph if_a ["if (In stock?) then (yes)"]')[0])
-    .toMatchObject({ type: 'subgraphIf', id: 'if_a', cond: 'In stock?', thenLabel: 'yes' });
-  expect(tokenize('subgraph if_a ["if (ok?) then"]')[0])
-    .toMatchObject({ type: 'subgraphIf', cond: 'ok?', thenLabel: undefined });
+test('reads the decision markers with and without labels', () => {
+  expect(tokenize('%% if')[0]).toMatchObject({ type: 'markIf' });
+  expect(tokenize('%% then (yes)')[0]).toMatchObject({ type: 'markThen', label: 'yes' });
+  expect(tokenize('%% then')[0]).toMatchObject({ type: 'markThen', label: undefined });
+  expect(tokenize('%% elseif')[0]).toMatchObject({ type: 'markElseif' });
+  expect(tokenize('%% else (no)')[0]).toMatchObject({ type: 'markElse', label: 'no' });
+  expect(tokenize('%% else')[0]).toMatchObject({ type: 'markElse', label: undefined });
+  expect(tokenize('%% endif')[0]).toMatchObject({ type: 'markEndif' });
 });
 
-test('reads elseif and else subgraphs, and a bare `end` closes any of them', () => {
-  expect(tokenize('subgraph elseif_a_1 ["elseif (b?) then (maybe)"]')[0])
-    .toMatchObject({ type: 'subgraphElseif', cond: 'b?', thenLabel: 'maybe' });
-  expect(tokenize('subgraph else_a ["else (no)"]')[0]).toMatchObject({ type: 'subgraphElse', label: 'no' });
-  expect(tokenize('subgraph else_a ["else"]')[0]).toMatchObject({ type: 'subgraphElse', label: undefined });
+// Retired in Task 5, when fork stops using subgraphs and `end` leaves the dialect.
+test('a bare `end` still closes a subgraph while loops and forks use them', () => {
   expect(tokenize('end')[0]).toMatchObject({ type: 'end-sub' });
 });
 

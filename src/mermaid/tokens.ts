@@ -18,9 +18,11 @@ export type Token =
   | { type: 'activity'; id: string; label: string; line: number }
   | { type: 'decision'; id: string; cond: string; line: number }
   | { type: 'forkBar'; id: string; line: number }
-  | { type: 'subgraphIf'; id: string; cond: string; thenLabel?: string; line: number }
-  | { type: 'subgraphElseif'; id: string; cond: string; thenLabel?: string; line: number }
-  | { type: 'subgraphElse'; id: string; label?: string; line: number }
+  | { type: 'markIf'; line: number }
+  | { type: 'markThen'; label?: string; line: number }
+  | { type: 'markElseif'; line: number }
+  | { type: 'markElse'; label?: string; line: number }
+  | { type: 'markEndif'; line: number }
   | { type: 'subgraphWhile'; id: string; cond: string; isLabel?: string; line: number }
   | { type: 'subgraphRepeat'; id: string; line: number }
   | { type: 'subgraphFork'; id: string; line: number }
@@ -49,9 +51,11 @@ const RE = {
   edgeLabel: /^(\w+)\s*--\s*(?:.*?)\s*-->\s*(\w+)$/,
   edgePipe:  /^(\w+)\s*-->\s*\|(?:.*?)\|\s*(\w+)$/,
   endSub:    /^end$/i,
-  subgraphIf:      /^subgraph\s+(if_\w+)\s*\["if\s*\((.*)\)\s*then\s*(?:\((.*)\))?"\]$/i,
-  subgraphElseif:  /^subgraph\s+(elseif_\w+)\s*\["elseif\s*\((.*)\)\s*then\s*(?:\((.*)\))?"\]$/i,
-  subgraphElse:    /^subgraph\s+(else_\w+)\s*\["else\s*(?:\((.*)\))?"\]$/i,
+  markIf:     /^%%\s*if$/i,
+  markThen:   /^%%\s*then\s*(?:\((.*)\))?$/i,
+  markElseif: /^%%\s*elseif$/i,
+  markElse:   /^%%\s*else\s*(?:\((.*)\))?$/i,
+  markEndif:  /^%%\s*endif$/i,
   subgraphWhile:   /^subgraph\s+(while_\w+)\s*\["while\s*\((.*?)\)\s*(?:is\s*\((.*)\))?"\]$/i,
   subgraphRepeat:  /^subgraph\s+(repeat_\w+)\s*\["repeat"\]$/i,
   subgraphFork:    /^subgraph\s+(fork_\w+)\s*\["fork"\]$/i,
@@ -108,18 +112,13 @@ export function tokenize(text: string): Token[] {
 
     if (RE.endSub.test(t)) { out.push({ type: 'end-sub', line }); continue; }
 
-    const ifHead = RE.subgraphIf.exec(t);
-    if (ifHead) {
-      out.push({ type: 'subgraphIf', id: ifHead[1], cond: ifHead[2], thenLabel: ifHead[3], line });
-      continue;
-    }
-    const elseifHead = RE.subgraphElseif.exec(t);
-    if (elseifHead) {
-      out.push({ type: 'subgraphElseif', id: elseifHead[1], cond: elseifHead[2], thenLabel: elseifHead[3], line });
-      continue;
-    }
-    const elseHead = RE.subgraphElse.exec(t);
-    if (elseHead) { out.push({ type: 'subgraphElse', id: elseHead[1], label: elseHead[2], line }); continue; }
+    if (RE.markIf.test(t)) { out.push({ type: 'markIf', line }); continue; }
+    const markThen = RE.markThen.exec(t);
+    if (markThen) { out.push({ type: 'markThen', label: markThen[1], line }); continue; }
+    if (RE.markElseif.test(t)) { out.push({ type: 'markElseif', line }); continue; }
+    const markElse = RE.markElse.exec(t);
+    if (markElse) { out.push({ type: 'markElse', label: markElse[1], line }); continue; }
+    if (RE.markEndif.test(t)) { out.push({ type: 'markEndif', line }); continue; }
 
     const whileHead = RE.subgraphWhile.exec(t);
     if (whileHead) {

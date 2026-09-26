@@ -13,7 +13,7 @@ test('emits the preamble verbatim between the header and the start node', () => 
   );
 });
 
-test('serializes a decision with an else arm, nesting each arm in its own subgraph', () => {
+test('serializes a decision as a diamond with labelled edges and markers', () => {
   const doc: Doc = { preamble: [], body: [
     { id: '1', kind: 'action', label: 'Receive order' },
     { id: '2', kind: 'if',
@@ -26,20 +26,23 @@ test('serializes a decision with an else arm, nesting each arm in its own subgra
     'start(("start"))\n' +
     'start --> n1\n' +
     'n1["Receive order"]\n' +
-    'n1 --> if_n2\n' +
-    'subgraph if_n2 ["if (In stock?) then (yes)"]\n' +
+    'n1 --> n2\n' +
+    '%% if\n' +
+    'n2{"In stock?"}\n' +
+    '%% then (yes)\n' +
+    '  n2 -- yes --> n3\n' +
     '  n3["Ship it"]\n' +
-    'end\n' +
-    'subgraph else_n2 ["else (no)"]\n' +
+    '%% else (no)\n' +
+    '  n2 -- no --> n4\n' +
     '  n4["Backorder"]\n' +
-    'end\n' +
+    '%% endif\n' +
     'n3 --> n5\n' +
     'n4 --> n5\n' +
     'n5(("stop"))\n',
   );
 });
 
-test('serializes elseif branches in order, each its own subgraph', () => {
+test('serializes elseif arms as a chain of diamonds', () => {
   const doc: Doc = { preamble: [], body: [
     { id: '1', kind: 'if', branches: [
       { cond: 'a?', thenLabel: 'yes', body: [] },
@@ -47,8 +50,24 @@ test('serializes elseif branches in order, each its own subgraph', () => {
     ] },
   ]};
   expect(serialize(doc)).toContain(
-    'subgraph if_n1 ["if (a?) then (yes)"]\nend\nsubgraph elseif_n1_1 ["elseif (b?) then (maybe)"]\nend',
+    '%% if\nn1{"a?"}\n%% then (yes)\n%% elseif\nelseif_n1_1{"b?"}\nn1 --> elseif_n1_1\n%% then (maybe)\n%% endif',
   );
+});
+
+test('quotes a branch label that would otherwise break the arrow', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'if',
+      branches: [{ cond: 'c?', thenLabel: 'a --> b', body: [{ id: '2', kind: 'action', label: 'x' }] }] },
+  ]};
+  expect(serialize(doc)).toContain('n1 -->|"a --> b"| n2');
+  expect(serialize(doc)).not.toContain('-- a --> b -->');
+});
+
+test('escapes a quote and a line break inside a condition', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'if', branches: [{ cond: 'say "hi"\nagain?', body: [] }] },
+  ]};
+  expect(serialize(doc)).toContain('n1{"say #quot;hi#quot;<br/>again?"}');
 });
 
 test('omits optional labels when they are absent', () => {

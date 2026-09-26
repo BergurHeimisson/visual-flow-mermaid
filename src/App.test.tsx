@@ -245,7 +245,7 @@ test('clicking an empty branch placeholder selects a slot; the next palette clic
 
   await userEvent.click(screen.getByRole('button', { name: /decision/i }));
   await expect.poll(() => panel.textContent).toMatch(
-    /subgraph if_\w+ \["if \(condition\?\) then \(yes\)"\]\nend\nsubgraph else_\w+ \["else \(no\)"\]\nend/,
+    /%% if\n\w+\{"condition\?"\}\n%% then \(yes\)\n%% else \(no\)\n%% endif/,
   );
 
   // The yes-branch's own empty-sequence zone (path `[{block:if,slot:'branch',index:0}]`,
@@ -254,14 +254,14 @@ test('clicking an empty branch placeholder selects a slot; the next palette clic
   await userEvent.click(screen.getByTestId(/#0:0$/));
   await userEvent.click(screen.getByRole('button', { name: /^action/i }));
   await expect.poll(() => panel.textContent).toMatch(
-    /subgraph if_\w+ \["if \(condition\?\) then \(yes\)"\]\n\s*\w+\["action"\]\nend\nsubgraph else_\w+ \["else \(no\)"\]\nend/,
+    /%% then \(yes\)\n\s+\w+ -- yes --> \w+\n\s+\w+\["action"\]\n%% else \(no\)\n%% endif/,
   );
 
   // Now the else arm — the user's exact reported case. Its zone's id ends "#else:0".
   await userEvent.click(screen.getByTestId(/#else:0$/));
   await userEvent.click(screen.getByRole('button', { name: /^action/i }));
   await expect.poll(() => panel.textContent).toMatch(
-    /subgraph if_\w+ \["if \(condition\?\) then \(yes\)"\]\n\s*\w+\["action"\]\nend\nsubgraph else_\w+ \["else \(no\)"\]\n\s*\w+\["action"\]\nend/,
+    /%% then \(yes\)\n\s+\w+ -- yes --> \w+\n\s+\w+\["action"\]\n%% else \(no\)\n\s+\w+ -- no --> \w+\n\s+\w+\["action"\]\n%% endif/,
   );
 });
 
@@ -453,13 +453,13 @@ test('dragging an existing block into a branch moves it there', async () => {
     await userEvent.click(screen.getByRole('button', { name: /^action/i }));
 
     const panel = screen.getByRole('region', { name: /mermaid/i });
-    expect(panel.textContent).toMatch(/end\n\w+\["action"\]/);
+    expect(panel.textContent).toMatch(/%% endif\n\w+\["action"\]/);
 
     const at = dragFrom(screen.getByText('action'), /#0:0$/);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: at.x, clientY: at.y });
 
     expect(panel.textContent).toMatch(
-      /subgraph if_\w+ \["if \(condition\?\) then \(yes\)"\]\n\s+\w+\["action"\]\nend\nsubgraph else_\w+ \["else \(no\)"\]\nend/,
+      /%% if\n\w+\{"condition\?"\}\n%% then \(yes\)\n\s+\w+ -- yes --> \w+\n\s+\w+\["action"\]\n%% else \(no\)\n%% endif/,
     );
   } finally {
     restore();

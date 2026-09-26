@@ -5,7 +5,7 @@ const IND = '  ';
 /** Where an id's incoming/outgoing edges attach: a real node id, or (for `if`/`while`/
  *  `repeat`/`fork`) the id of the subgraph standing in for that construct — Mermaid draws
  *  an edge to/from a subgraph's boundary exactly as it would to a node. */
-type Tail = { from: string };
+type Tail = { from: string; label?: string };
 
 type SeqResult = { lines: string[]; entry?: string; tails: Tail[] };
 
@@ -23,8 +23,17 @@ function q(text: string): string {
   return `"${text.replace(/"/g, '#quot;').replace(/\n/g, '<br/>')}"`;
 }
 
-function edgeLine(from: string, to: string): string {
-  return `${from} --> ${to}`;
+/** A label safe to sit bare between `--` and `-->`. Anything else (an arrow, a pipe, a
+ *  brace) goes through the quoted `-->|"..."|` form instead, where `q()`'s escaping
+ *  applies. Both forms tokenize back to the same `edge` token, which the parser
+ *  discards, so this choice is purely about what a renderer shows. */
+const SIMPLE_LABEL = /^[\w ?!.,'-]+$/;
+
+function edgeLine(from: string, to: string, label?: string): string {
+  if (label === undefined) return `${from} --> ${to}`;
+  return SIMPLE_LABEL.test(label)
+    ? `${from} -- ${label} --> ${to}`
+    : `${from} -->|${q(label)}| ${to}`;
 }
 
 function indent(lines: string[]): string[] {
@@ -45,7 +54,7 @@ function emitSeq(seq: Block[], ctx: { n: number }): SeqResult {
 
   for (const block of seq) {
     const b = emitBlock(block, ctx);
-    for (const t of pending) lines.push(edgeLine(t.from, b.entry));
+    for (const t of pending) lines.push(edgeLine(t.from, b.entry, t.label));
     lines.push(...b.lines);
     if (entry === undefined) entry = b.entry;
     pending = b.tails;
@@ -80,32 +89,36 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
     case 'if': {
       const lines: string[] = [];
       const tails: Tail[] = [];
-      let lastSgId = '';
+      let lastDiamond = id;
       block.branches.forEach((branch: Branch, i) => {
-        const kw = i === 0 ? 'if' : 'elseif';
-        const sgId = i === 0 ? `if_${id}` : `elseif_${id}_${i}`;
-        lastSgId = sgId;
-        const title = `${kw} (${branch.cond}) then${opt(branch.thenLabel)}`;
+        const dId = i === 0 ? id : `elseif_${id}_${i}`;
+        lines.push(i === 0 ? '%% if' : '%% elseif');
+        lines.push(`${dId}{${q(branch.cond)}}`);
+        // The no-path into an elseif arm carries no label: the model has a label only
+        // for the final `else`, exactly as PlantUML does.
+        if (i > 0) lines.push(edgeLine(lastDiamond, dId));
+        lines.push(`%% then${opt(branch.thenLabel)}`);
         const body = emitSeq(branch.body, ctx);
-        lines.push(`subgraph ${sgId} [${q(title)}]`);
+        if (body.entry) body.lines.unshift(edgeLine(dId, body.entry, branch.thenLabel));
         lines.push(...indent(body.lines));
-        lines.push('end');
         tails.push(...body.tails);
+        lastDiamond = dId;
       });
       if (block.elseBody) {
-        const sgId = `else_${id}`;
-        const title = `else${opt(block.elseLabel)}`;
+        lines.push(`%% else${opt(block.elseLabel)}`);
         const body = emitSeq(block.elseBody, ctx);
-        lines.push(`subgraph ${sgId} [${q(title)}]`);
+        if (body.entry) body.lines.unshift(edgeLine(lastDiamond, body.entry, block.elseLabel));
         lines.push(...indent(body.lines));
-        lines.push('end');
         tails.push(...body.tails);
       } else {
         // No else arm: the last diamond's "no" side always has somewhere live to go — see
-        // layout.ts's `terminates()` for the same rule on the canvas side.
-        tails.push({ from: lastSgId });
+        // layout.ts's `terminates()` for the same rule on the canvas side. It is unlabelled
+        // because `elseLabel` only ever exists alongside an `elseBody` (see `edits.ts`), and
+        // a labelled fall-through would have no marker to be read back from.
+        tails.push({ from: lastDiamond });
       }
-      return { lines, entry: `if_${id}`, tails };
+      lines.push('%% endif');
+      return { lines, entry: id, tails };
     }
     case 'fork': {
       const lines: string[] = [];

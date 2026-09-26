@@ -82,8 +82,20 @@ export function parse(text: string): ParseResult {
     return token as Extract<Token, { type: T }>;
   }
 
-  /** A subgraph body: every construct nests as `subgraph ... [...]` ... `end`, so any
-   *  nested sequence just reads blocks until it meets its own closing `end`. */
+  const IF_STOP = new Set<Token['type']>(['markElseif', 'markElse', 'markEndif']);
+
+  /** A marker-delimited body: read blocks until one of this construct's own closing
+   *  markers, which the caller consumes. A nested construct is consumed whole by the
+   *  recursive `parseBlock`, so the stop set is only ever consulted at block-start
+   *  position — the same property `parseNested` relied on with `end`. */
+  function parseBody(stop: ReadonlySet<Token['type']>): Block[] {
+    const out: Block[] = [];
+    while (i < structural.length && !stop.has(peek().type)) out.push(parseBlock());
+    return out;
+  }
+
+  /** A subgraph body: the constructs still on the old dialect (`while`, `repeat`, `fork`)
+   *  nest as `subgraph ... [...]` ... `end`, so they read blocks until their closing `end`. */
   function parseNested(): Block[] {
     const out: Block[] = [];
     while (i < structural.length && peek().type !== 'end-sub') out.push(parseBlock());
@@ -104,21 +116,28 @@ export function parse(text: string): ParseResult {
       }
       case 'stop': return { id: newId(), kind: 'stop' };
       case 'end':  return { id: newId(), kind: 'end' };
-      case 'subgraphIf': {
-        const branches: Branch[] = [{ cond: token.cond, thenLabel: token.thenLabel, body: parseNested() }];
-        while (peek()?.type === 'subgraphElseif') {
-          const head = next() as Extract<Token, { type: 'subgraphElseif' }>;
-          branches.push({ cond: head.cond, thenLabel: head.thenLabel, body: parseNested() });
+      case 'markIf': {
+        const branches: Branch[] = [];
+        for (;;) {
+          const diamond = expect('decision', 'a `{"condition"}` decision node');
+          const then = expect('markThen', '`%% then`');
+          branches.push({ cond: diamond.cond, thenLabel: then.label, body: parseBody(IF_STOP) });
+          if (peek()?.type !== 'markElseif') break;
+          next();
         }
         let elseBody: Block[] | undefined;
         let elseLabel: string | undefined;
-        if (peek()?.type === 'subgraphElse') {
-          const head = next() as Extract<Token, { type: 'subgraphElse' }>;
-          elseLabel = head.label;
-          elseBody = parseNested();
+        if (peek()?.type === 'markElse') {
+          elseLabel = (next() as Extract<Token, { type: 'markElse' }>).label;
+          elseBody = parseBody(IF_STOP);
         }
+        expect('markEndif', '`%% endif`');
         return { id: newId(), kind: 'if', branches, elseBody, elseLabel };
       }
+      case 'decision':
+      case 'forkBar':
+        throw new Fail({ kind: 'syntax', line: token.line,
+          message: 'A `{...}` decision must follow `%% if`, `%% elseif`, `%% while` or `%% repeat while`.' });
       case 'subgraphWhile': {
         const body = parseNested();
         let endLabel: string | undefined;

@@ -70,12 +70,24 @@ test('escapes a quote and a line break inside a condition', () => {
   expect(serialize(doc)).toContain('n1{"say #quot;hi#quot;<br/>again?"}');
 });
 
+test('serializes a while loop as a diamond with a back edge and a labelled exit', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'while', cond: 'more?', isLabel: 'yes', endLabel: 'no',
+      body: [{ id: '2', kind: 'action', label: 'read' }] },
+    { id: '3', kind: 'action', label: 'done' },
+  ]};
+  expect(serialize(doc)).toContain(
+    '%% while\nn1{"more?"}\n%% do (yes)\n  n1 -- yes --> n2\n  n2["read"]\n  n2 --> n1\n%% endwhile (no)\nn1 -- no --> n3\nn3["done"]',
+  );
+});
+
 test('omits optional labels when they are absent', () => {
   const doc: Doc = { preamble: [], body: [
     { id: '1', kind: 'while', cond: 'more?', body: [] },
   ]};
-  expect(serialize(doc)).toContain('subgraph while_n1 ["while (more?)"]\nend');
-  expect(serialize(doc)).not.toContain('%% endwhile');
+  const out = serialize(doc);
+  expect(out).toContain('%% while\nn1{"more?"}\n%% do\n%% endwhile\n');
+  expect(out).not.toContain('()');
 });
 
 test('serializes while, repeat, and fork', () => {
@@ -90,7 +102,6 @@ test('serializes while, repeat, and fork', () => {
     ] },
   ]};
   const out = serialize(doc);
-  expect(out).toContain('subgraph while_n1 ["while (more?) is (yes)"]\n  n2["read"]\n  n2 --> while_n1\nend\n%% endwhile (no)');
   expect(out).toContain('subgraph repeat_n3 ["repeat"]\n  n4["poll"]\n  n4 --> repeat_n3\nend\n%% repeat while (again?) is (yes)');
   expect(out).toContain('subgraph fork_n5 ["fork"]\n  n6["left"]\nend\nsubgraph forkagain_n5_1 ["fork again"]\n  n7["right"]\nend');
 });

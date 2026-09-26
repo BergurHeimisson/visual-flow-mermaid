@@ -23,13 +23,14 @@ export type Token =
   | { type: 'markElseif'; line: number }
   | { type: 'markElse'; label?: string; line: number }
   | { type: 'markEndif'; line: number }
-  | { type: 'subgraphWhile'; id: string; cond: string; isLabel?: string; line: number }
+  | { type: 'markWhile'; line: number }
+  | { type: 'markDo'; label?: string; line: number }
+  | { type: 'markEndwhile'; label?: string; line: number }
   | { type: 'subgraphRepeat'; id: string; line: number }
   | { type: 'subgraphFork'; id: string; line: number }
   | { type: 'subgraphForkAgain'; id: string; line: number }
   | { type: 'end-sub'; line: number }
   | { type: 'edge'; from: string; to: string; line: number }
-  | { type: 'endwhileNote'; label?: string; line: number }
   | { type: 'repeatWhileNote'; cond: string; isLabel?: string; line: number }
   | { type: 'note'; side: 'left' | 'right'; text: string; line: number }
   | { type: 'cosmetic'; text: string; line: number }
@@ -56,11 +57,12 @@ const RE = {
   markElseif: /^%%\s*elseif$/i,
   markElse:   /^%%\s*else\s*(?:\((.*)\))?$/i,
   markEndif:  /^%%\s*endif$/i,
-  subgraphWhile:   /^subgraph\s+(while_\w+)\s*\["while\s*\((.*?)\)\s*(?:is\s*\((.*)\))?"\]$/i,
   subgraphRepeat:  /^subgraph\s+(repeat_\w+)\s*\["repeat"\]$/i,
   subgraphFork:    /^subgraph\s+(fork_\w+)\s*\["fork"\]$/i,
   subgraphForkAgain: /^subgraph\s+(forkagain_\w+)\s*\["fork again"\]$/i,
-  endwhileNote:     /^%%\s*endwhile\s*(?:\((.*)\))?$/i,
+  markWhile:    /^%%\s*while$/i,
+  markDo:       /^%%\s*do\s*(?:\((.*)\))?$/i,
+  markEndwhile: /^%%\s*endwhile\s*(?:\((.*)\))?$/i,
   repeatWhileNote:  /^%%\s*repeat\s+while\s*\((.*?)\)\s*(?:is\s*\((.*)\))?$/i,
   noteInline: /^%%\s*note\s+(left|right)\s*:\s*(.*)$/i,
   noteBlock:  /^%%\s*note\s+(left|right)$/i,
@@ -120,11 +122,6 @@ export function tokenize(text: string): Token[] {
     if (markElse) { out.push({ type: 'markElse', label: markElse[1], line }); continue; }
     if (RE.markEndif.test(t)) { out.push({ type: 'markEndif', line }); continue; }
 
-    const whileHead = RE.subgraphWhile.exec(t);
-    if (whileHead) {
-      out.push({ type: 'subgraphWhile', id: whileHead[1], cond: whileHead[2], isLabel: whileHead[3], line });
-      continue;
-    }
     const repeatHead = RE.subgraphRepeat.exec(t);
     if (repeatHead) { out.push({ type: 'subgraphRepeat', id: repeatHead[1], line }); continue; }
 
@@ -133,8 +130,11 @@ export function tokenize(text: string): Token[] {
     const forkAgainHead = RE.subgraphForkAgain.exec(t);
     if (forkAgainHead) { out.push({ type: 'subgraphForkAgain', id: forkAgainHead[1], line }); continue; }
 
-    const endwhileNote = RE.endwhileNote.exec(t);
-    if (endwhileNote) { out.push({ type: 'endwhileNote', label: endwhileNote[1], line }); continue; }
+    if (RE.markWhile.test(t)) { out.push({ type: 'markWhile', line }); continue; }
+    const markDo = RE.markDo.exec(t);
+    if (markDo) { out.push({ type: 'markDo', label: markDo[1], line }); continue; }
+    const markEndwhile = RE.markEndwhile.exec(t);
+    if (markEndwhile) { out.push({ type: 'markEndwhile', label: markEndwhile[1], line }); continue; }
 
     const repeatWhileNote = RE.repeatWhileNote.exec(t);
     if (repeatWhileNote) {

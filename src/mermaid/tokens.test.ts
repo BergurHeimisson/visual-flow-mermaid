@@ -34,15 +34,19 @@ test('reads the decision markers with and without labels', () => {
   expect(tokenize('%% endif')[0]).toMatchObject({ type: 'markEndif' });
 });
 
+test('reads the while markers', () => {
+  expect(tokenize('%% while')[0]).toMatchObject({ type: 'markWhile' });
+  expect(tokenize('%% do (yes)')[0]).toMatchObject({ type: 'markDo', label: 'yes' });
+  expect(tokenize('%% endwhile (no)')[0]).toMatchObject({ type: 'markEndwhile', label: 'no' });
+  expect(tokenize('%% endwhile')[0]).toMatchObject({ type: 'markEndwhile', label: undefined });
+});
+
 // Retired in Task 5, when fork stops using subgraphs and `end` leaves the dialect.
 test('a bare `end` still closes a subgraph while loops and forks use them', () => {
   expect(tokenize('end')[0]).toMatchObject({ type: 'end-sub' });
 });
 
-test('reads loop subgraphs and their trailing label comments', () => {
-  expect(tokenize('subgraph while_a ["while (more?) is (yes)"]')[0])
-    .toMatchObject({ type: 'subgraphWhile', cond: 'more?', isLabel: 'yes' });
-  expect(tokenize('%% endwhile (no)')[0]).toMatchObject({ type: 'endwhileNote', label: 'no' });
+test('reads the repeat subgraph and its trailing label comment', () => {
   expect(tokenize('subgraph repeat_a ["repeat"]')[0]).toMatchObject({ type: 'subgraphRepeat' });
   expect(tokenize('%% repeat while (again?) is (yes)')[0])
     .toMatchObject({ type: 'repeatWhileNote', cond: 'again?', isLabel: 'yes' });

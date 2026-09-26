@@ -135,14 +135,13 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
       return { lines, entry: `fork_${id}`, tails };
     }
     case 'while': {
-      const sgId = `while_${id}`;
-      const title = `while (${block.cond})${optIs(block.isLabel)}`;
+      const lines = ['%% while', `${id}{${q(block.cond)}}`, `%% do${opt(block.isLabel)}`];
       const body = emitSeq(block.body, ctx);
-      const lines = [`subgraph ${sgId} [${q(title)}]`, ...indent(body.lines)];
-      for (const t of body.tails) lines.push(indent([edgeLine(t.from, sgId)])[0]);
-      lines.push('end');
-      if (block.endLabel !== undefined) lines.push(`%% endwhile (${block.endLabel})`);
-      return { lines, entry: sgId, tails: [{ from: sgId }] };
+      if (body.entry) body.lines.unshift(edgeLine(id, body.entry, block.isLabel));
+      for (const t of body.tails) body.lines.push(edgeLine(t.from, id, t.label));
+      lines.push(...indent(body.lines));
+      lines.push(`%% endwhile${opt(block.endLabel)}`);
+      return { lines, entry: id, tails: [{ from: id, label: block.endLabel }] };
     }
     case 'repeat': {
       const sgId = `repeat_${id}`;

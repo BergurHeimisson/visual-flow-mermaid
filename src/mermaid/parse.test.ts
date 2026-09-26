@@ -42,7 +42,7 @@ test('refuses a diamond that does not follow an opening marker', () => {
 test('parses loops and fork', () => {
   const doc = ok(
     'start(("start"))\n'
-    + 'subgraph while_x ["while (m?) is (yes)"]\n  r["r"]\nend\n%% endwhile (no)\n'
+    + '%% while\nw{"m?"}\n%% do (yes)\n  r["r"]\n%% endwhile (no)\n'
     + 'subgraph repeat_x ["repeat"]\n  p["p"]\nend\n%% repeat while (a?)\n'
     + 'subgraph fork_x ["fork"]\n  l["l"]\nend\n'
     + 'subgraph forkagain_x_1 ["fork again"]\n  r2["r"]\nend\n',
@@ -98,12 +98,12 @@ test('round-trips a document written by the serializer', () => {
 });
 
 test('refuses an unsupported construct nested deep inside an if inside a while', () => {
-  const text = 'start(("start"))\nsubgraph while_x ["while (m?) is (yes)"]\n'
-    + '%% if\nx{"c?"}\n%% then\npartition "P" {\na["A"]\n}\n%% endif\nend\n';
+  const text = 'start(("start"))\n%% while\nw{"m?"}\n%% do (yes)\n'
+    + '%% if\nx{"c?"}\n%% then\npartition "P" {\na["A"]\n}\n%% endif\n%% endwhile\n';
   const r = parse(text);
   expect(r.ok).toBe(false);
   if (!r.ok) {
-    expect(r.error).toMatchObject({ kind: 'unsupported', line: 6, construct: 'partition' });
+    expect(r.error).toMatchObject({ kind: 'unsupported', line: 8, construct: 'partition' });
   }
 });
 

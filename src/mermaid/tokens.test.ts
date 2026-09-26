@@ -78,3 +78,29 @@ test('classifies structural constructs we cannot represent as unsupported', () =
 test('reports 1-based line numbers', () => {
   expect(tokenize('flowchart TD\n\nstart(("start"))\npartition x {')[2]).toMatchObject({ line: 4 });
 });
+
+test('reads a diamond decision node', () => {
+  expect(tokenize('n2{"In stock?"}')[0])
+    .toMatchObject({ type: 'decision', id: 'n2', cond: 'In stock?' });
+});
+
+test('unescapes a condition that carries a quote or a line break', () => {
+  expect(tokenize('n2{"say #quot;hi#quot;"}')[0]).toMatchObject({ cond: 'say "hi"' });
+  expect(tokenize('n2{"first<br/>second"}')[0]).toMatchObject({ cond: 'first\nsecond' });
+});
+
+test('reads a fork bar', () => {
+  expect(tokenize('n8@{ shape: fork }')[0]).toMatchObject({ type: 'forkBar', id: 'n8' });
+  expect(tokenize('join_n8@{shape:fork}')[0]).toMatchObject({ type: 'forkBar', id: 'join_n8' });
+});
+
+test('refuses an extended shape that is not a fork, naming the shape', () => {
+  expect(tokenize('n8@{ shape: cyl }')[0])
+    .toMatchObject({ type: 'unsupported', construct: '@{ shape: cyl }' });
+});
+
+test('reads both labelled edge forms and discards the label', () => {
+  expect(tokenize('a -- yes --> b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
+  expect(tokenize('a -->|yes| b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
+  expect(tokenize('a -->|"a --> b"| b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
+});

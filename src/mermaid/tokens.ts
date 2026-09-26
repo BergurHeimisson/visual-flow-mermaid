@@ -16,6 +16,8 @@ export type Token =
   | { type: 'stop'; id: string; line: number }
   | { type: 'end'; id: string; line: number }
   | { type: 'activity'; id: string; label: string; line: number }
+  | { type: 'decision'; id: string; cond: string; line: number }
+  | { type: 'forkBar'; id: string; line: number }
   | { type: 'subgraphIf'; id: string; cond: string; thenLabel?: string; line: number }
   | { type: 'subgraphElseif'; id: string; cond: string; thenLabel?: string; line: number }
   | { type: 'subgraphElse'; id: string; label?: string; line: number }
@@ -40,7 +42,12 @@ const RE = {
   stop:      /^(\w+)\(\("stop"\)\)$/i,
   end:       /^(\w+)\(\("end"\)\)$/i,
   activity:  /^(\w+)\["(.*)"\]$/,
+  decision:  /^(\w+)\{"(.*)"\}$/,
+  forkBar:   /^(\w+)@\{\s*shape:\s*fork\s*\}$/i,
+  shapeAt:   /^(\w+)@\{\s*shape:\s*(\w[\w-]*)\s*\}$/i,
   edge:      /^(\w+)\s*-->\s*(\w+)$/,
+  edgeLabel: /^(\w+)\s*--\s*(?:.*?)\s*-->\s*(\w+)$/,
+  edgePipe:  /^(\w+)\s*-->\s*\|(?:.*?)\|\s*(\w+)$/,
   endSub:    /^end$/i,
   subgraphIf:      /^subgraph\s+(if_\w+)\s*\["if\s*\((.*)\)\s*then\s*(?:\((.*)\))?"\]$/i,
   subgraphElseif:  /^subgraph\s+(elseif_\w+)\s*\["elseif\s*\((.*)\)\s*then\s*(?:\((.*)\))?"\]$/i,
@@ -87,7 +94,16 @@ export function tokenize(text: string): Token[] {
     const activity = RE.activity.exec(t);
     if (activity) { out.push({ type: 'activity', id: activity[1], label: unescape(activity[2]), line }); continue; }
 
-    const edge = RE.edge.exec(t);
+    const decision = RE.decision.exec(t);
+    if (decision) { out.push({ type: 'decision', id: decision[1], cond: unescape(decision[2]), line }); continue; }
+
+    const forkBar = RE.forkBar.exec(t);
+    if (forkBar) { out.push({ type: 'forkBar', id: forkBar[1], line }); continue; }
+
+    const shapeAt = RE.shapeAt.exec(t);
+    if (shapeAt) { out.push({ type: 'unsupported', construct: `@{ shape: ${shapeAt[2]} }`, text: raw.trim(), line }); continue; }
+
+    const edge = RE.edge.exec(t) ?? RE.edgeLabel.exec(t) ?? RE.edgePipe.exec(t);
     if (edge) { out.push({ type: 'edge', from: edge[1], to: edge[2], line }); continue; }
 
     if (RE.endSub.test(t)) { out.push({ type: 'end-sub', line }); continue; }

@@ -19,16 +19,14 @@ const WORDS = [
   'first line\nsecond line', 'count > 10?',
 ];
 
-// A subgraph title is exactly one physical line (see tokens.ts's `subgraphIf` etc.
-// regexes), so a newline embedded in a condition (or in a thenLabel/elseLabel/isLabel/
-// endLabel) is not expressible in this dialect at all -- there is no escape or
-// continuation syntax for it, unlike an activity label (`id["..."]`, where a newline is
-// escaped to `<br/>`) or a note body (an explicit `%% note` / `%% end note` block). It's
-// also unreachable from the app: the inline editor that produces these fields is a
-// single-line HTML <input>, so a user can never type a newline into a condition or a
-// then/else/is/end label. So conditions (and, were they ever drawn from a word pool
-// instead of the fixed 'yes'/'no' literals below, then/else/is/end labels too) draw only
-// from this single-line-safe subset of WORDS.
+// A marker (`%% then (yes)`, `%% endwhile (no)`) is exactly one physical line and has no
+// escape or continuation syntax, so a newline in a thenLabel/elseLabel/isLabel/endLabel is
+// not expressible in this dialect at all -- unlike an activity label (`id["..."]`, where a
+// newline is escaped to `<br/>`) or a note body (an explicit `%% note` / `%% end note`
+// block). Conditions now live in a quoted diamond label (`id{"..."}`) and so could in
+// principle carry a `<br/>`, but the inline editor that produces them is a single-line HTML
+// <input>, so a user can never type one. Conditions therefore draw from this single-line-safe
+// subset too, matching what the app can actually produce.
 const SINGLE_LINE_WORDS = WORDS.filter((w) => !w.includes('\n'));
 
 export function randomDoc(seed: number, depth = 3): Doc {

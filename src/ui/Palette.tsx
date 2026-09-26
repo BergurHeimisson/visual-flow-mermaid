@@ -6,8 +6,8 @@ export type { PaletteKind };
 export const PALETTE_ITEMS: { kind: PaletteKind; label: string; hint: string }[] = [
   { kind: 'action', label: 'Action',      hint: 'id["text"]' },
   { kind: 'if',     label: 'Decision',    hint: 'if / elseif / else' },
-  { kind: 'while',  label: 'While loop',  hint: 'while (subgraph)' },
-  { kind: 'repeat', label: 'Repeat loop', hint: 'repeat (subgraph)' },
+  { kind: 'while',  label: 'While loop',  hint: 'while / do / endwhile' },
+  { kind: 'repeat', label: 'Repeat loop', hint: 'repeat / repeat while' },
   { kind: 'fork',   label: 'Fork',        hint: 'fork / fork again' },
   { kind: 'stop',   label: 'Stop',        hint: '(("stop"))' },
   { kind: 'end',    label: 'End',         hint: '(("end"))' },

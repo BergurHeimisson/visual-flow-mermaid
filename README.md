@@ -18,23 +18,45 @@ it's a plain graph of `id[shape]` nodes and `A --> B` edges. To keep the tree fa
 round-trippable through **valid, renderable** Mermaid, this app defines its own canonical
 dialect on top of standard flowchart syntax:
 
-- `if`/`elseif`/`else`, `while`, `repeat`, and `fork`/`fork again` each become a
-  `subgraph <id> ["<clause>"]` ... `end` block — nesting stands in for PlantUML's
-  `endif`/`endwhile`/`end fork` keywords, and the bracketed title carries the same clause
-  text those keywords used to carry (`if (cond) then (label)`, `while (cond) is (label)`).
-- A label that PlantUML puts on a *closing* keyword — `endwhile (label)`, `repeat while
-  (cond) is (label)` — and an attached note both have nowhere to live in valid Mermaid
-  syntax, so they ride along as `%%` comments immediately after the construct. Comments are
-  inert to any renderer, so the file stays plain, valid, renderable Mermaid throughout.
-- Real `-->` edges connect consecutive nodes for correct rendering elsewhere (GitHub,
-  mermaid.live, …), but this app's own parser never reads them — it reconstructs the tree
-  purely from subgraph nesting, node shapes, and `%%` comments, the same way the PlantUML
-  parser reads keywords rather than arrows. An empty branch therefore renders with no arrow
-  leading into it — a minor, deliberate cosmetic gap, not a parsing concern.
+- The graph itself is ordinary, idiomatic Mermaid: `id["label"]` actions, `id{"cond"}`
+  diamonds joined by labelled `-- yes -->` edges, and `id@{ shape: fork }` bars. It renders
+  as a real flowchart anywhere — GitHub, mermaid.live, and so on. **The fork bar needs
+  Mermaid v11.3.0+**; everything else is core syntax.
+- The document *tree* cannot be recovered from that graph, because an `elseif` chain and a
+  nested `if` produce identical topology and an empty branch produces no edge at all. So the
+  tree rides alongside as inert `%%` markers — `%% if` / `%% then (l)` / `%% elseif` /
+  `%% else (l)` / `%% endif`, `%% while` / `%% do (l)` / `%% endwhile (l)`, `%% repeat` /
+  `%% repeat while (l)`, and `%% fork` / `%% fork again` / `%% end fork`. Every condition
+  lives in the diamond that follows its opening marker; markers carry only the labels. An
+  attached note rides along the same way. Comments are inert to any renderer, so the file
+  stays plain, valid, renderable Mermaid throughout.
+- This app's own parser **never reads edges** — it reconstructs the tree purely from markers
+  and node shapes, the same way the PlantUML parser reads keywords rather than arrows. An
+  empty branch therefore renders with no arrow leading into it — a minor, deliberate
+  cosmetic gap, not a parsing concern.
+
+A decision looks like this:
+
+```
+%% if
+n2{"In stock?"}
+%% then (yes)
+  n2 -- yes --> n3
+  n3["Ship it"]
+%% else (no)
+  n2 -- no --> n4
+  n4["Backorder"]
+%% endif
+n3 --> n5
+n4 --> n5
+n5["Invoice"]
+```
 
 Because the dialect is a fixed subset (like PlantUML's own accepted keyword spellings), a
-`subgraph`/node shape this app doesn't recognise is refused on import rather than silently
-dropped — see "Opening existing `.mmd` files" below.
+node shape this app doesn't recognise is refused on import rather than silently dropped —
+see "Opening existing `.mmd` files" below. Since the markers *are* the structure, a
+construct that has lost one is refused too, rather than parsed into a different diagram.
+
 
 ## What you can do
 
@@ -64,8 +86,9 @@ a renderer of your choice.
 The rule is **refuse, don't mangle**. A diagram that looks right but means something
 different is the worst possible outcome, so the parser distinguishes two cases:
 
-- **Structures it cannot represent** — a foreign/unrecognised `subgraph`, an unsupported
-  node shape, more than one `flowchart` declaration, or any line the tokenizer doesn't
+- **Structures it cannot represent** — a `subgraph` (including the dialect this app itself
+  wrote before the marker form), an unsupported node shape, a construct that has lost a
+  marker, more than one `flowchart` declaration, or any line the tokenizer doesn't
   recognise at all. These **abort the import**, naming the line and the construct. Your open
   diagram is left untouched. In practice this means the app can reliably reopen files it
   wrote itself, or files handwritten to its dialect — not arbitrary Mermaid diagrams scraped
@@ -123,8 +146,8 @@ Dependencies point one way only: `model` ← `layout` ← `canvas`/`ui`/`state`.
 
 The headline test is a property test in `src/mermaid/roundtrip.test.ts`: for 200 generated
 documents, `parse(serialize(doc))` must equal `doc` modulo ids. It is what stops the
-serializer and parser drifting apart, and it is the primary evidence that the subgraph/
-comment dialect above actually holds together across every construct, including nested and
+serializer and parser drifting apart, and it is the primary evidence that the marker
+dialect above actually holds together across every construct, including nested and
 awkward shapes.
 
 ### A note for anyone changing the layout engine

@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import { parse } from './parse';
 import { serialize } from './serialize';
+// Imported as text rather than read from disk: keeps the test free of node builtins, which
+// this project has no `@types/node` for, and pins the fixtures at build time.
+import simpleFixture from '../../e2e/fixtures/simple.mmd?raw';
+import terminatorFixture from '../../e2e/fixtures/terminator.mmd?raw';
 
 function ok(text: string) {
   const r = parse(text);
@@ -235,13 +239,10 @@ test('a fork whose `%% fork again` went missing is refused, not silently merged'
 
 // The e2e fixtures are hand-written in this dialect. Checking them here means the fast
 // suite catches drift, rather than a Playwright run several minutes later.
-test('both e2e fixtures parse in the current dialect', async () => {
-  const fs = await import('node:fs/promises');
-  const path = await import('node:path');
-  for (const name of ['simple', 'terminator']) {
-    const text = await fs.readFile(path.resolve(process.cwd(), `e2e/fixtures/${name}.mmd`), 'utf8');
+test('both e2e fixtures parse in the current dialect', () => {
+  for (const [name, text] of [['simple', simpleFixture], ['terminator', terminatorFixture]] as const) {
     const r = parse(text);
-    expect(r.ok, `${name}: ${r.ok ? '' : r.error.message} (line ${r.ok ? '' : r.error.line})`).toBe(true);
+    expect(r.ok, `${name}: ${r.ok ? '' : `${r.error.message} (line ${r.error.line})`}`).toBe(true);
   }
 });
 

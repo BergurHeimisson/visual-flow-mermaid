@@ -197,3 +197,49 @@ test('refuses a file containing a second flowchart declaration', () => {
     expect(r.error.message).toMatch(/one diagram|multiple/i);
   }
 });
+
+// --- The markers ARE the structure ----------------------------------------------------
+//
+// A marker that goes missing cannot be detected by spelling: `%% endwile` opens with no
+// keyword this dialect knows. What protects the document instead is that every marker a
+// construct needs is `expect`ed, so its absence refuses loudly. These tests pin that.
+// The one case `expect` cannot catch is a dropped `%% fork again`, which would silently
+// merge two parallel columns into one — so a fork is refused unless it has two branches.
+
+test('a missing `%% then` refuses rather than guessing', () => {
+  const r = parse('start(("start"))\n%% if\nx{"c?"}\n  a["A"]\n%% endif\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/%% then/);
+});
+
+test('a missing `%% endwhile` refuses rather than running to end of file', () => {
+  const r = parse('start(("start"))\n%% while\nw{"m?"}\n%% do\n  a["A"]\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/%% endwhile/);
+});
+
+test('a missing `%% repeat while` refuses rather than dropping the condition', () => {
+  const r = parse('start(("start"))\n%% repeat\n  a["A"]\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/%% repeat while/);
+});
+
+test('a fork whose `%% fork again` went missing is refused, not silently merged', () => {
+  const r = parse(
+    'start(("start"))\n%% fork\nf@{ shape: fork }\n  a["A"]\n  b["B"]\n'
+    + '%% end fork\njoin_f@{ shape: fork }\n',
+  );
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/two branches|fork again/i);
+});
+
+test('an ordinary comment that opens with a marker keyword stays a comment', () => {
+  // `%% do not edit` and `%% if you change this` both open with a marker keyword. Treating
+  // a keyword prefix as reserved would refuse these outright, so the dialect does not.
+  const r = parse('%% do not edit\n%% if you change this, re-export it\nstart(("start"))\na["A"]\n');
+  expect(r.ok).toBe(true);
+  if (r.ok) {
+    expect(r.doc.preamble).toEqual(['%% do not edit', '%% if you change this, re-export it']);
+    expect(serialize(r.doc)).toContain('%% do not edit\n%% if you change this, re-export it\n');
+  }
+});

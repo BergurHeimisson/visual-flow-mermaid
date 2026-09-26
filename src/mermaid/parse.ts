@@ -152,6 +152,15 @@ export function parse(text: string): ParseResult {
         while (peek()?.type === 'markForkAgain') { next(); branches.push(parseBody(FORK_STOP)); }
         expect('markEndFork', '`%% end fork`');
         expect('forkBar', 'a `@{ shape: fork }` join bar');
+        // Every other missing marker is caught by an `expect` above. A dropped
+        // `%% fork again` is the one that would not be: its column would simply be
+        // absorbed into the previous one, silently turning parallel work into
+        // sequential. A fork always has at least two branches (`edits.ts` refuses to
+        // remove below two), so a single branch means a marker went missing.
+        if (branches.length < 2) {
+          throw new Fail({ kind: 'syntax', line: token.line,
+            message: 'A fork needs at least two branches; a `%% fork again` is missing.' });
+        }
         return { id: newId(), kind: 'fork', branches };
       }
       default:

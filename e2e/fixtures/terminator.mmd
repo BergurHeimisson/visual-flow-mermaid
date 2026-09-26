@@ -1,12 +1,15 @@
 flowchart TD
 start(("start"))
-start --> if_a
-subgraph if_a ["if (bread in the house?) then (No)"]
+start --> d1
+%% if
+d1{"bread in the house?"}
+%% then (No)
+  d1 -- No --> g1
   g1["Go to bakery"]
   %% note right: And buy bread
-end
-subgraph else_a ["else (Yes)"]
+%% else (Yes)
+  d1 -- Yes --> s1
   s1(("stop"))
-end
+%% endif
 g1 --> e1
 e1(("end"))

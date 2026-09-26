@@ -3,13 +3,16 @@ flowchart TD
 start(("start"))
 start --> a1
 a1["Receive order"]
-a1 --> if_a
-subgraph if_a ["if (In stock?) then (yes)"]
+a1 --> d1
+%% if
+d1{"In stock?"}
+%% then (yes)
+  d1 -- yes --> s1
   s1["Ship it"]
-end
-subgraph else_a ["else (no)"]
+%% else (no)
+  d1 -- no --> b1
   b1["Backorder"]
-end
+%% endif
 s1 --> stop1
 b1 --> stop1
 stop1(("stop"))

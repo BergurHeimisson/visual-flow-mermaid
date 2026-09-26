@@ -233,6 +233,18 @@ test('a fork whose `%% fork again` went missing is refused, not silently merged'
   if (!r.ok) expect(r.error.message).toMatch(/two branches|fork again/i);
 });
 
+// The e2e fixtures are hand-written in this dialect. Checking them here means the fast
+// suite catches drift, rather than a Playwright run several minutes later.
+test('both e2e fixtures parse in the current dialect', async () => {
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  for (const name of ['simple', 'terminator']) {
+    const text = await fs.readFile(path.resolve(process.cwd(), `e2e/fixtures/${name}.mmd`), 'utf8');
+    const r = parse(text);
+    expect(r.ok, `${name}: ${r.ok ? '' : r.error.message} (line ${r.ok ? '' : r.error.line})`).toBe(true);
+  }
+});
+
 test('an ordinary comment that opens with a marker keyword stays a comment', () => {
   // `%% do not edit` and `%% if you change this` both open with a marker keyword. Treating
   // a keyword prefix as reserved would refuse these outright, so the dialect does not.

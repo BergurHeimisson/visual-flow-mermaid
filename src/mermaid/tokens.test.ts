@@ -47,16 +47,16 @@ test('reads the while markers', () => {
   expect(tokenize('%% endwhile')[0]).toMatchObject({ type: 'markEndwhile', label: undefined });
 });
 
-// Retired in Task 5, when fork stops using subgraphs and `end` leaves the dialect.
-test('a bare `end` still closes a subgraph while loops and forks use them', () => {
-  expect(tokenize('end')[0]).toMatchObject({ type: 'end-sub' });
+test('reads the fork markers', () => {
+  expect(tokenize('%% fork')[0]).toMatchObject({ type: 'markFork' });
+  expect(tokenize('%% fork again')[0]).toMatchObject({ type: 'markForkAgain' });
+  expect(tokenize('%% end fork')[0]).toMatchObject({ type: 'markEndFork' });
 });
 
-
-test('reads fork and fork-again subgraphs, distinct from a plain `end`', () => {
-  expect(tokenize('subgraph fork_a ["fork"]\nsubgraph forkagain_a_1 ["fork again"]\nend\nend').map((t) => t.type))
-    .toEqual(['subgraphFork', 'subgraphForkAgain', 'end-sub', 'end-sub']);
+test('a bare `end` is no longer a token of this dialect', () => {
+  expect(tokenize('end')[0]).toMatchObject({ type: 'unsupported' });
 });
+
 
 test('reads inline and block notes, stripping the %% marker from the body', () => {
   expect(tokenize('%% note right: hello')[0]).toMatchObject({ type: 'note', side: 'right', text: 'hello' });

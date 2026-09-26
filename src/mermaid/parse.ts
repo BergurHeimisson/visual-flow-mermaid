@@ -85,23 +85,15 @@ export function parse(text: string): ParseResult {
   const IF_STOP = new Set<Token['type']>(['markElseif', 'markElse', 'markEndif']);
   const WHILE_STOP = new Set<Token['type']>(['markEndwhile']);
   const REPEAT_STOP = new Set<Token['type']>(['markRepeatWhile']);
+  const FORK_STOP = new Set<Token['type']>(['markForkAgain', 'markEndFork']);
 
   /** A marker-delimited body: read blocks until one of this construct's own closing
    *  markers, which the caller consumes. A nested construct is consumed whole by the
    *  recursive `parseBlock`, so the stop set is only ever consulted at block-start
-   *  position — the same property `parseNested` relied on with `end`. */
+   *  position — the same property the retired `subgraph`/`end` nesting relied on. */
   function parseBody(stop: ReadonlySet<Token['type']>): Block[] {
     const out: Block[] = [];
     while (i < structural.length && !stop.has(peek().type)) out.push(parseBlock());
-    return out;
-  }
-
-  /** A subgraph body: the constructs still on the old dialect (`while`, `repeat`, `fork`)
-   *  nest as `subgraph ... [...]` ... `end`, so they read blocks until their closing `end`. */
-  function parseNested(): Block[] {
-    const out: Block[] = [];
-    while (i < structural.length && peek().type !== 'end-sub') out.push(parseBlock());
-    expect('end-sub', '`end`');
     return out;
   }
 
@@ -154,9 +146,12 @@ export function parse(text: string): ParseResult {
         const diamond = expect('decision', 'a `{"condition"}` decision node');
         return { id: newId(), kind: 'repeat', body, cond: diamond.cond, isLabel: close.label };
       }
-      case 'subgraphFork': {
-        const branches: Block[][] = [parseNested()];
-        while (peek()?.type === 'subgraphForkAgain') { next(); branches.push(parseNested()); }
+      case 'markFork': {
+        expect('forkBar', 'a `@{ shape: fork }` split bar');
+        const branches: Block[][] = [parseBody(FORK_STOP)];
+        while (peek()?.type === 'markForkAgain') { next(); branches.push(parseBody(FORK_STOP)); }
+        expect('markEndFork', '`%% end fork`');
+        expect('forkBar', 'a `@{ shape: fork }` join bar');
         return { id: newId(), kind: 'fork', branches };
       }
       default:

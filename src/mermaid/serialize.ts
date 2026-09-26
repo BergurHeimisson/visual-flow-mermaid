@@ -2,9 +2,10 @@ import type { Block, Branch, Doc } from '../model/types';
 
 const IND = '  ';
 
-/** Where an id's incoming/outgoing edges attach: a real node id, or (for `if`/`while`/
- *  `repeat`/`fork`) the id of the subgraph standing in for that construct — Mermaid draws
- *  an edge to/from a subgraph's boundary exactly as it would to a node. */
+/** Where a construct's outgoing edge starts, and what the arrow is labelled. For `if` and
+ *  `while` that is the diamond itself (an unmatched arm, or the loop's exit); for `repeat`
+ *  the trailing diamond; for `fork` the join bar. The label is the model's own — a while's
+ *  `endLabel`, a branch's `thenLabel` — or absent where the model has none. */
 type Tail = { from: string; label?: string };
 
 type SeqResult = { lines: string[]; entry?: string; tails: Tail[] };
@@ -13,7 +14,7 @@ function opt(label: string | undefined): string {
   return label === undefined ? '' : ` (${label})`;
 }
 
-/** Quote text for a Mermaid node/subgraph label: `"` and newlines are the two characters
+/** Quote text for a Mermaid node label: `"` and newlines are the two characters
  *  that would otherwise break out of the quoted form. */
 function q(text: string): string {
   return `"${text.replace(/"/g, '#quot;').replace(/\n/g, '<br/>')}"`;
@@ -59,7 +60,7 @@ function emitSeq(seq: Block[], ctx: { n: number }): SeqResult {
 }
 
 /**
- * The Mermaid node/subgraph id for a block is NOT its own `NodeId` — a block's `NodeId` is
+ * The Mermaid node id for a block is NOT its own `NodeId` — a block's `NodeId` is
  * freshly random on every import (see `model/ids.ts`), and the id chosen here has to survive
  * a round trip byte-for-byte (`roundtrip.test.ts`'s idempotency check) so long as the tree's
  * *shape* is unchanged. A plain preorder counter, reset per `serialize()` call, gives every
@@ -117,18 +118,19 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
       return { lines, entry: id, tails };
     }
     case 'fork': {
-      const lines: string[] = [];
+      const joinId = `join_${id}`;
+      const lines = ['%% fork', `${id}@{ shape: fork }`];
       const tails: Tail[] = [];
       block.branches.forEach((col, i) => {
-        const sgId = i === 0 ? `fork_${id}` : `forkagain_${id}_${i}`;
-        const title = i === 0 ? 'fork' : 'fork again';
+        if (i > 0) lines.push('%% fork again');
         const body = emitSeq(col, ctx);
-        lines.push(`subgraph ${sgId} [${q(title)}]`);
+        if (body.entry) body.lines.unshift(edgeLine(id, body.entry));
         lines.push(...indent(body.lines));
-        lines.push('end');
         tails.push(...body.tails);
       });
-      return { lines, entry: `fork_${id}`, tails };
+      lines.push('%% end fork', `${joinId}@{ shape: fork }`);
+      for (const t of tails) lines.push(edgeLine(t.from, joinId, t.label));
+      return { lines, entry: id, tails: [{ from: joinId }] };
     }
     case 'while': {
       const lines = ['%% while', `${id}{${q(block.cond)}}`, `%% do${opt(block.isLabel)}`];

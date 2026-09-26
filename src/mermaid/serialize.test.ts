@@ -90,19 +90,26 @@ test('omits optional labels when they are absent', () => {
   expect(out).not.toContain('()');
 });
 
-test('serializes while, repeat, and fork', () => {
+test('serializes a fork as split and join bars', () => {
   const doc: Doc = { preamble: [], body: [
-    { id: '1', kind: 'while', cond: 'more?', isLabel: 'yes', endLabel: 'no',
-      body: [{ id: '2', kind: 'action', label: 'read' }] },
-    { id: '3', kind: 'repeat', cond: 'again?', isLabel: 'yes',
-      body: [{ id: '4', kind: 'action', label: 'poll' }] },
-    { id: '5', kind: 'fork', branches: [
-      [{ id: '6', kind: 'action', label: 'left' }],
-      [{ id: '7', kind: 'action', label: 'right' }],
+    { id: '1', kind: 'fork', branches: [
+      [{ id: '2', kind: 'action', label: 'left' }],
+      [{ id: '3', kind: 'action', label: 'right' }],
     ] },
   ]};
+  expect(serialize(doc)).toContain(
+    '%% fork\nn1@{ shape: fork }\n  n1 --> n2\n  n2["left"]\n%% fork again\n  n1 --> n3\n  n3["right"]\n'
+    + '%% end fork\njoin_n1@{ shape: fork }\nn2 --> join_n1\nn3 --> join_n1\n',
+  );
+});
+
+test('an empty fork branch emits no edge to nothing', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'fork', branches: [[], [{ id: '2', kind: 'action', label: 'right' }]] },
+  ]};
   const out = serialize(doc);
-  expect(out).toContain('subgraph fork_n5 ["fork"]\n  n6["left"]\nend\nsubgraph forkagain_n5_1 ["fork again"]\n  n7["right"]\nend');
+  expect(out).toContain('%% fork\nn1@{ shape: fork }\n%% fork again\n  n1 --> n2\n');
+  expect(out).not.toMatch(/n1 --> *$/m);
 });
 
 test('serializes a repeat loop with its diamond after the body', () => {

@@ -44,10 +44,21 @@ test('parses loops and fork', () => {
     'start(("start"))\n'
     + '%% while\nw{"m?"}\n%% do (yes)\n  r["r"]\n%% endwhile (no)\n'
     + '%% repeat\n  p["p"]\n%% repeat while (yes)\nrw{"a?"}\n'
-    + 'subgraph fork_x ["fork"]\n  l["l"]\nend\n'
-    + 'subgraph forkagain_x_1 ["fork again"]\n  r2["r"]\nend\n',
+    + '%% fork\nf@{ shape: fork }\n  l["l"]\n%% fork again\n  r2["r"]\n%% end fork\njoin_f@{ shape: fork }\n',
   ).doc;
   expect(doc.body.map((b) => b.kind)).toEqual(['while', 'repeat', 'fork']);
+});
+
+test('refuses an old-dialect subgraph file rather than half-parsing it', () => {
+  const r = parse(
+    'flowchart TD\nstart(("start"))\nsubgraph if_a ["if (c?) then (yes)"]\n  b["B"]\nend\n',
+  );
+  expect(r.ok).toBe(false);
+  if (!r.ok) {
+    expect(r.error.kind).toBe('unsupported');
+    expect(r.error.message).toMatch(/subgraph is not supported/i);
+    expect(r.error.line).toBe(3);
+  }
 });
 
 test('attaches a note to the activity it follows', () => {
@@ -132,10 +143,15 @@ test('reports a syntax error for a stray note rather than dropping it', () => {
   if (!afterStop.ok) expect(afterStop.error.kind).toBe('syntax');
 });
 
-test('reports a syntax error for a stray closing `end` at the top level', () => {
+// `end` used to close a subgraph. Now that nesting is carried by markers it is simply
+// old-dialect syntax, so it is refused by name rather than parsed as a terminator.
+test('refuses a stray closing `end` at the top level', () => {
   const r = parse('start(("start"))\na["A"]\nend\n');
   expect(r.ok).toBe(false);
-  if (!r.ok) expect(r.error.kind).toBe('syntax');
+  if (!r.ok) {
+    expect(r.error.kind).toBe('unsupported');
+    expect(r.error.line).toBe(3);
+  }
 });
 
 test('reports the last real token line for an unterminated if, not a hardcoded 1', () => {

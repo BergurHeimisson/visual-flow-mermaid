@@ -54,6 +54,35 @@ test('serializes elseif arms as a chain of diamonds', () => {
   );
 });
 
+// An empty arm has no node to carry the flow onward, so its tail is the diamond itself.
+// Without this the arm's arrow leads nowhere and the decision renders as a dead end.
+test('an empty then-arm routes its labelled edge to whatever follows the decision', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'if',
+      branches: [{ cond: 'c?', thenLabel: 'yes', body: [] }],
+      elseBody: [{ id: '2', kind: 'action', label: 'b' }], elseLabel: 'no' },
+    { id: '3', kind: 'action', label: 'after' },
+  ]};
+  expect(serialize(doc)).toContain('%% endif\nn1 -- yes --> n3\nn2 --> n3\nn3["after"]');
+});
+
+test('an empty else-arm routes its labelled edge to whatever follows the decision', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'if',
+      branches: [{ cond: 'c?', thenLabel: 'yes', body: [{ id: '2', kind: 'action', label: 'a' }] }],
+      elseBody: [], elseLabel: 'no' },
+    { id: '3', kind: 'action', label: 'after' },
+  ]};
+  expect(serialize(doc)).toContain('%% endif\nn2 --> n3\nn1 -- no --> n3\nn3["after"]');
+});
+
+test('an empty fork column connects the split bar straight to the join bar', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'fork', branches: [[], [{ id: '2', kind: 'action', label: 'right' }]] },
+  ]};
+  expect(serialize(doc)).toContain('%% end fork\njoin_n1@{ shape: fork }\nn1 --> join_n1\nn2 --> join_n1');
+});
+
 test('quotes a branch label that would otherwise break the arrow', () => {
   const doc: Doc = { preamble: [], body: [
     { id: '1', kind: 'if',

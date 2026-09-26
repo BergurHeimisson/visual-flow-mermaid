@@ -300,7 +300,9 @@ test('dragging an existing block into a branch moves it there (real browser)', a
   // The action lands after the if construct's closing `end` — that is the starting state
   // this test moves away from.
   await expect(panel).toContainText('["action"]');
-  expect(await panel.innerText()).toMatch(/%% endif\n\w+\["action"\]/);
+  expect(await panel.innerText()).toMatch(
+    /%% endif\n\w+ -- yes --> \w+\n\w+ -- no --> \w+\n\w+\["action"\]/,
+  );
 
   const source = page.getByRole('region', { name: /^canvas$/i }).getByText('action');
   const sourceBox = (await source.boundingBox())!;

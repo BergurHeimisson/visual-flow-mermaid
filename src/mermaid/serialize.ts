@@ -96,17 +96,28 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
         if (i > 0) lines.push(edgeLine(lastDiamond, dId));
         lines.push(`%% then${opt(branch.thenLabel)}`);
         const body = emitSeq(branch.body, ctx);
-        if (body.entry) body.lines.unshift(edgeLine(dId, body.entry, branch.thenLabel));
+        if (body.entry) {
+          body.lines.unshift(edgeLine(dId, body.entry, branch.thenLabel));
+          tails.push(...body.tails);
+        } else {
+          // An empty arm has no node to carry the flow onward, so the diamond itself is the
+          // tail: the arm's labelled arrow runs straight to whatever follows the decision,
+          // instead of the arm rendering as a dead end.
+          tails.push({ from: dId, label: branch.thenLabel });
+        }
         lines.push(...indent(body.lines));
-        tails.push(...body.tails);
         lastDiamond = dId;
       });
       if (block.elseBody) {
         lines.push(`%% else${opt(block.elseLabel)}`);
         const body = emitSeq(block.elseBody, ctx);
-        if (body.entry) body.lines.unshift(edgeLine(lastDiamond, body.entry, block.elseLabel));
+        if (body.entry) {
+          body.lines.unshift(edgeLine(lastDiamond, body.entry, block.elseLabel));
+          tails.push(...body.tails);
+        } else {
+          tails.push({ from: lastDiamond, label: block.elseLabel });
+        }
         lines.push(...indent(body.lines));
-        tails.push(...body.tails);
       } else {
         // No else arm: the last diamond's "no" side always has somewhere live to go — see
         // layout.ts's `terminates()` for the same rule on the canvas side. It is unlabelled
@@ -124,9 +135,15 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
       block.branches.forEach((col, i) => {
         if (i > 0) lines.push('%% fork again');
         const body = emitSeq(col, ctx);
-        if (body.entry) body.lines.unshift(edgeLine(id, body.entry));
+        if (body.entry) {
+          body.lines.unshift(edgeLine(id, body.entry));
+          tails.push(...body.tails);
+        } else {
+          // Same rule as an empty decision arm: an empty parallel column is a pass-through,
+          // so the split bar connects straight to the join bar.
+          tails.push({ from: id });
+        }
         lines.push(...indent(body.lines));
-        tails.push(...body.tails);
       });
       lines.push('%% end fork', `${joinId}@{ shape: fork }`);
       for (const t of tails) lines.push(edgeLine(t.from, joinId, t.label));

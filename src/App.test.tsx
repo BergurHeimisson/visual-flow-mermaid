@@ -453,7 +453,11 @@ test('dragging an existing block into a branch moves it there', async () => {
     await userEvent.click(screen.getByRole('button', { name: /^action/i }));
 
     const panel = screen.getByRole('region', { name: /mermaid/i });
-    expect(panel.textContent).toMatch(/%% endif\n\w+\["action"\]/);
+    // Both arms are empty, so the decision passes through on both labels to the action
+    // that follows it — rather than leaving that action unreachable.
+    expect(panel.textContent).toMatch(
+      /%% endif\n\w+ -- yes --> \w+\n\w+ -- no --> \w+\n\w+\["action"\]/,
+    );
 
     const at = dragFrom(screen.getByText('action'), /#0:0$/);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: at.x, clientY: at.y });

@@ -249,10 +249,20 @@ An `else`-less `if` emits its fall-through edge from the last diamond
 sets and clears the two together), and a labelled fall-through would have no
 marker to be read back from, which would break the round trip.
 
-Two empty-body cases must be pinned down: an empty `repeat` body has no first
-node, so the construct's entry falls back to its trailing diamond; an empty
-branch emits its labelled edge with no target, so that edge is omitted. The
-second is the cosmetic gap already documented in the README.
+Two empty-body cases must be pinned down. An empty `repeat` body has no first
+node, so the construct's entry falls back to its trailing diamond and the back
+edge is omitted rather than pointing the diamond at itself.
+
+An empty `if` arm has no node to carry the flow onward, so **the diamond itself
+becomes the arm's tail**: the arm's labelled arrow runs straight to whatever
+follows the decision, and a decision with two empty arms passes through on both
+labels. An empty `fork` column behaves the same way, connecting the split bar
+straight to the join bar.
+
+*(Amended after approval, at the user's request. The original text here omitted
+the edge entirely, preserving the dead-end arm the old subgraph dialect had and
+which `README.md` documented as a deliberate cosmetic gap. Tails affect only
+edges, which the parser discards, so the round trip is unaffected either way.)*
 
 ## Testing
 

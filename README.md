@@ -32,8 +32,10 @@ dialect on top of standard flowchart syntax:
   stays plain, valid, renderable Mermaid throughout.
 - This app's own parser **never reads edges** — it reconstructs the tree purely from markers
   and node shapes, the same way the PlantUML parser reads keywords rather than arrows. An
-  empty branch therefore renders with no arrow leading into it — a minor, deliberate
-  cosmetic gap, not a parsing concern.
+  empty arm has no node to carry the flow onward, so the diamond itself becomes the arm's
+  source: the arm's labelled arrow runs straight to whatever follows the decision, and a
+  decision with two empty arms passes through on both labels. An empty parallel column
+  behaves the same way, connecting the fork's split bar straight to its join bar.
 
 A decision looks like this:
 

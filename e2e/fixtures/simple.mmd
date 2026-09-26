@@ -1,0 +1,15 @@
+flowchart TD
+%% title Fixture
+start(("start"))
+start --> a1
+a1["Receive order"]
+a1 --> if_a
+subgraph if_a ["if (In stock?) then (yes)"]
+  s1["Ship it"]
+end
+subgraph else_a ["else (no)"]
+  b1["Backorder"]
+end
+s1 --> stop1
+b1 --> stop1
+stop1(("stop"))

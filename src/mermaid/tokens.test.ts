@@ -34,6 +34,12 @@ test('reads the decision markers with and without labels', () => {
   expect(tokenize('%% endif')[0]).toMatchObject({ type: 'markEndif' });
 });
 
+test('reads the repeat markers, with the condition no longer in the marker', () => {
+  expect(tokenize('%% repeat')[0]).toMatchObject({ type: 'markRepeat' });
+  expect(tokenize('%% repeat while (yes)')[0]).toMatchObject({ type: 'markRepeatWhile', label: 'yes' });
+  expect(tokenize('%% repeat while')[0]).toMatchObject({ type: 'markRepeatWhile', label: undefined });
+});
+
 test('reads the while markers', () => {
   expect(tokenize('%% while')[0]).toMatchObject({ type: 'markWhile' });
   expect(tokenize('%% do (yes)')[0]).toMatchObject({ type: 'markDo', label: 'yes' });
@@ -46,11 +52,6 @@ test('a bare `end` still closes a subgraph while loops and forks use them', () =
   expect(tokenize('end')[0]).toMatchObject({ type: 'end-sub' });
 });
 
-test('reads the repeat subgraph and its trailing label comment', () => {
-  expect(tokenize('subgraph repeat_a ["repeat"]')[0]).toMatchObject({ type: 'subgraphRepeat' });
-  expect(tokenize('%% repeat while (again?) is (yes)')[0])
-    .toMatchObject({ type: 'repeatWhileNote', cond: 'again?', isLabel: 'yes' });
-});
 
 test('reads fork and fork-again subgraphs, distinct from a plain `end`', () => {
   expect(tokenize('subgraph fork_a ["fork"]\nsubgraph forkagain_a_1 ["fork again"]\nend\nend').map((t) => t.type))

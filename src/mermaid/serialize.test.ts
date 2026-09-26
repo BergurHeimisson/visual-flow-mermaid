@@ -102,8 +102,26 @@ test('serializes while, repeat, and fork', () => {
     ] },
   ]};
   const out = serialize(doc);
-  expect(out).toContain('subgraph repeat_n3 ["repeat"]\n  n4["poll"]\n  n4 --> repeat_n3\nend\n%% repeat while (again?) is (yes)');
   expect(out).toContain('subgraph fork_n5 ["fork"]\n  n6["left"]\nend\nsubgraph forkagain_n5_1 ["fork again"]\n  n7["right"]\nend');
+});
+
+test('serializes a repeat loop with its diamond after the body', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'repeat', cond: 'again?', isLabel: 'yes',
+      body: [{ id: '2', kind: 'action', label: 'poll' }] },
+  ]};
+  expect(serialize(doc)).toContain(
+    '%% repeat\n  n2["poll"]\n%% repeat while (yes)\nn1{"again?"}\nn2 --> n1\nn1 -- yes --> n2\n',
+  );
+});
+
+test('an empty repeat body emits no self-referential back edge', () => {
+  const doc: Doc = { preamble: [], body: [
+    { id: '1', kind: 'repeat', cond: 'again?', body: [] },
+  ]};
+  const out = serialize(doc);
+  expect(out).toContain('%% repeat\n%% repeat while\nn1{"again?"}\n');
+  expect(out).not.toContain('n1 --> n1');
 });
 
 test('serializes a single-line note as a %% comment after its activity', () => {

@@ -43,7 +43,7 @@ test('parses loops and fork', () => {
   const doc = ok(
     'start(("start"))\n'
     + '%% while\nw{"m?"}\n%% do (yes)\n  r["r"]\n%% endwhile (no)\n'
-    + 'subgraph repeat_x ["repeat"]\n  p["p"]\nend\n%% repeat while (a?)\n'
+    + '%% repeat\n  p["p"]\n%% repeat while (yes)\nrw{"a?"}\n'
     + 'subgraph fork_x ["fork"]\n  l["l"]\nend\n'
     + 'subgraph forkagain_x_1 ["fork again"]\n  r2["r"]\nend\n',
   ).doc;

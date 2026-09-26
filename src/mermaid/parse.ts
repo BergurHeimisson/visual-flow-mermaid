@@ -84,6 +84,7 @@ export function parse(text: string): ParseResult {
 
   const IF_STOP = new Set<Token['type']>(['markElseif', 'markElse', 'markEndif']);
   const WHILE_STOP = new Set<Token['type']>(['markEndwhile']);
+  const REPEAT_STOP = new Set<Token['type']>(['markRepeatWhile']);
 
   /** A marker-delimited body: read blocks until one of this construct's own closing
    *  markers, which the caller consumes. A nested construct is consumed whole by the
@@ -147,10 +148,11 @@ export function parse(text: string): ParseResult {
         return { id: newId(), kind: 'while', cond: diamond.cond,
                  isLabel: doMark.label, endLabel: close.label, body };
       }
-      case 'subgraphRepeat': {
-        const body = parseNested();
-        const close = expect('repeatWhileNote', '`%% repeat while (cond) is (label)`');
-        return { id: newId(), kind: 'repeat', body, cond: close.cond, isLabel: close.isLabel };
+      case 'markRepeat': {
+        const body = parseBody(REPEAT_STOP);
+        const close = expect('markRepeatWhile', '`%% repeat while`');
+        const diamond = expect('decision', 'a `{"condition"}` decision node');
+        return { id: newId(), kind: 'repeat', body, cond: diamond.cond, isLabel: close.label };
       }
       case 'subgraphFork': {
         const branches: Block[][] = [parseNested()];

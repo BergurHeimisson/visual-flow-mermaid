@@ -13,10 +13,6 @@ function opt(label: string | undefined): string {
   return label === undefined ? '' : ` (${label})`;
 }
 
-function optIs(label: string | undefined): string {
-  return label === undefined ? '' : ` is (${label})`;
-}
-
 /** Quote text for a Mermaid node/subgraph label: `"` and newlines are the two characters
  *  that would otherwise break out of the quoted form. */
 function q(text: string): string {
@@ -144,13 +140,16 @@ function emitBlock(block: Block, ctx: { n: number }): { lines: string[]; entry: 
       return { lines, entry: id, tails: [{ from: id, label: block.endLabel }] };
     }
     case 'repeat': {
-      const sgId = `repeat_${id}`;
+      const lines = ['%% repeat'];
       const body = emitSeq(block.body, ctx);
-      const lines = [`subgraph ${sgId} [${q('repeat')}]`, ...indent(body.lines)];
-      for (const t of body.tails) lines.push(indent([edgeLine(t.from, sgId)])[0]);
-      lines.push('end');
-      lines.push(`%% repeat while (${block.cond})${optIs(block.isLabel)}`);
-      return { lines, entry: sgId, tails: [{ from: sgId }] };
+      lines.push(...indent(body.lines));
+      lines.push(`%% repeat while${opt(block.isLabel)}`);
+      lines.push(`${id}{${q(block.cond)}}`);
+      for (const t of body.tails) lines.push(edgeLine(t.from, id, t.label));
+      // An empty body has no node to loop back to, so the back edge is omitted rather
+      // than pointing the diamond at itself; the construct's entry is then the diamond.
+      if (body.entry) lines.push(edgeLine(id, body.entry, block.isLabel));
+      return { lines, entry: body.entry ?? id, tails: [{ from: id }] };
     }
   }
 }

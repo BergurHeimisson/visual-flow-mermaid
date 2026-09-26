@@ -104,12 +104,12 @@ n2{"In stock?"}
 %% then (yes)
   n2 -- yes --> n3
   n3["Ship it"]
-  n3 --> n5
 %% else (no)
   n2 -- no --> n4
   n4["Backorder"]
-  n4 --> n5
 %% endif
+n3 --> n5
+n4 --> n5
 n5["Invoice"]
 n5 --> n6
 %% while
@@ -237,6 +237,17 @@ every call:
 A `repeat`'s entry is its body's first node, not its diamond, so the block's
 `n<k>` naming its diamond creates no conflict.
 - `indent()` is retained for construct bodies.
+
+Tail edges keep their current emission point. `emitSeq` flushes a construct's
+pending tails immediately before the *next* sibling's lines, so an `if`'s join
+edges appear after `%% endif` rather than inside the arm that produced them, as
+in the worked example above. A loop's back edge is different: it is emitted by
+the loop block itself, from its own body's tails, and so sits inside the body.
+
+An `else`-less `if` emits its fall-through edge from the last diamond
+**unlabelled**. `elseLabel` is only ever set alongside an `elseBody` (`edits.ts`
+sets and clears the two together), and a labelled fall-through would have no
+marker to be read back from, which would break the round trip.
 
 Two empty-body cases must be pinned down: an empty `repeat` body has no first
 node, so the construct's entry falls back to its trailing diamond; an empty

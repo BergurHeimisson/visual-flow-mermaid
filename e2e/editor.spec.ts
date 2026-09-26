@@ -18,13 +18,13 @@ test('inserting a decision and editing its condition updates the notation', asyn
   await page.getByRole('button', { name: /decision/i }).click();
 
   const panel = page.getByRole('region', { name: /mermaid/i });
-  await expect(panel).toContainText('if (condition?) then (yes)');
+  await expect(panel).toContainText('{"condition?"}');
 
   await page.getByText('condition?').first().dblclick();
   await page.keyboard.type('In stock?');
   await page.keyboard.press('Enter');
 
-  await expect(panel).toContainText('if (In stock?) then (yes)');
+  await expect(panel).toContainText('{"In stock?"}');
 });
 
 test('undo reverses an insertion', async ({ page }) => {
@@ -243,9 +243,9 @@ test('dropping into the yes branch of a fresh decision lands in that branch (rea
   await page.mouse.move(cx, cy, { steps: 10 });
   await page.mouse.up();
 
-  // The action must land in the `if` arm, not the `else` arm: nested inside its subgraph.
+  // The action must land in the `if` arm, not the `else` arm: between `%% then` and `%% else`.
   const text = await page.getByRole('region', { name: /mermaid/i }).innerText();
-  expect(text).toMatch(/subgraph if_\w+ \["if \(condition\?\) then \(yes\)"\]\n\s*\w+\["action"\]/);
+  expect(text).toMatch(/%% if\n\w+\{"condition\?"\}\n%% then \(yes\)\n\s+\w+ -- yes --> \w+\n\s+\w+\["action"\]/);
 });
 
 // --- Final review, I3: "drag a note onto a box" (spec interaction table) ---------------
@@ -300,7 +300,9 @@ test('dragging an existing block into a branch moves it there (real browser)', a
   // The action lands after the if construct's closing `end` — that is the starting state
   // this test moves away from.
   await expect(panel).toContainText('["action"]');
-  expect(await panel.innerText()).toMatch(/end\n\w+\["action"\]/);
+  expect(await panel.innerText()).toMatch(
+    /%% endif\n\w+ -- yes --> \w+\n\w+ -- no --> \w+\n\w+\["action"\]/,
+  );
 
   const source = page.getByRole('region', { name: /^canvas$/i }).getByText('action');
   const sourceBox = (await source.boundingBox())!;
@@ -320,7 +322,7 @@ test('dragging an existing block into a branch moves it there (real browser)', a
 
   const text = await panel.innerText();
   expect(text).toMatch(
-    /subgraph if_\w+ \["if \(condition\?\) then \(yes\)"\]\n\s+\w+\["action"\]\nend\nsubgraph else_\w+ \["else \(no\)"\]\nend/,
+    /%% if\n\w+\{"condition\?"\}\n%% then \(yes\)\n\s+\w+ -- yes --> \w+\n\s+\w+\["action"\]\n%% else \(no\)\n%% endif/,
   );
 });
 
@@ -340,15 +342,15 @@ test('clicking the empty "no" branch placeholder lets you add an action there (r
   await page.getByRole('button', { name: /decision/i }).click();
 
   const panel = page.getByRole('region', { name: /mermaid/i });
-  await expect(panel).toContainText('if (condition?) then (yes)');
-  await expect(panel).toContainText('else (no)');
+  await expect(panel).toContainText('{"condition?"}');
+  await expect(panel).toContainText('%% else (no)');
 
   // Fill the yes arm the same way: click its (empty, persistent) placeholder, then Action.
   const yesZone = page.getByTestId(/#0:0$/);
   await expect(yesZone).toBeVisible();
   await yesZone.click();
   await page.getByRole('button', { name: /^action/i }).click();
-  await expect(panel).toContainText(/if \(condition\?\) then \(yes\)\n\s*\w+\["action"\]/);
+  await expect(panel).toContainText(/%% then \(yes\)\n\s+\w+ -- yes --> \w+\n\s+\w+\["action"\]/);
 
   // The user's exact case: the no/else arm is still empty. Its placeholder must be visible
   // with no drag in flight, and clicking it must select that slot for the next insert.
@@ -359,7 +361,7 @@ test('clicking the empty "no" branch placeholder lets you add an action there (r
 
   const text = await panel.innerText();
   expect(text).toMatch(
-    /subgraph if_\w+ \["if \(condition\?\) then \(yes\)"\]\n\s*\w+\["action"\]\nend\nsubgraph else_\w+ \["else \(no\)"\]\n\s*\w+\["action"\]\nend/,
+    /%% then \(yes\)\n\s+\w+ -- yes --> \w+\n\s+\w+\["action"\]\n%% else \(no\)\n\s+\w+ -- no --> \w+\n\s+\w+\["action"\]\n%% endif/,
   );
 });
 
@@ -449,11 +451,11 @@ test('clicking delete on the controls bar still deletes the block (real browser)
   await page.goto('/');
   await page.getByRole('button', { name: /decision/i }).click();
   const panel = page.getByRole('region', { name: /mermaid/i });
-  await expect(panel).toContainText('if (condition?)');
+  await expect(panel).toContainText('{"condition?"}');
 
   await page.getByRole('button', { name: /^delete$/i }).click();
 
-  await expect(panel).not.toContainText('if (condition?)');
+  await expect(panel).not.toContainText('{"condition?"}');
 });
 
 // Regression for the bug the user reported ("I would not expect a line to go out of the end

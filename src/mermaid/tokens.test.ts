@@ -24,34 +24,39 @@ test('reads an edge but does not classify it as any node kind', () => {
   expect(tokenize('a --> b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
 });
 
-test('reads a decision subgraph with and without a then-label', () => {
-  expect(tokenize('subgraph if_a ["if (In stock?) then (yes)"]')[0])
-    .toMatchObject({ type: 'subgraphIf', id: 'if_a', cond: 'In stock?', thenLabel: 'yes' });
-  expect(tokenize('subgraph if_a ["if (ok?) then"]')[0])
-    .toMatchObject({ type: 'subgraphIf', cond: 'ok?', thenLabel: undefined });
+test('reads the decision markers with and without labels', () => {
+  expect(tokenize('%% if')[0]).toMatchObject({ type: 'markIf' });
+  expect(tokenize('%% then (yes)')[0]).toMatchObject({ type: 'markThen', label: 'yes' });
+  expect(tokenize('%% then')[0]).toMatchObject({ type: 'markThen', label: undefined });
+  expect(tokenize('%% elseif')[0]).toMatchObject({ type: 'markElseif' });
+  expect(tokenize('%% else (no)')[0]).toMatchObject({ type: 'markElse', label: 'no' });
+  expect(tokenize('%% else')[0]).toMatchObject({ type: 'markElse', label: undefined });
+  expect(tokenize('%% endif')[0]).toMatchObject({ type: 'markEndif' });
 });
 
-test('reads elseif and else subgraphs, and a bare `end` closes any of them', () => {
-  expect(tokenize('subgraph elseif_a_1 ["elseif (b?) then (maybe)"]')[0])
-    .toMatchObject({ type: 'subgraphElseif', cond: 'b?', thenLabel: 'maybe' });
-  expect(tokenize('subgraph else_a ["else (no)"]')[0]).toMatchObject({ type: 'subgraphElse', label: 'no' });
-  expect(tokenize('subgraph else_a ["else"]')[0]).toMatchObject({ type: 'subgraphElse', label: undefined });
-  expect(tokenize('end')[0]).toMatchObject({ type: 'end-sub' });
+test('reads the repeat markers, with the condition no longer in the marker', () => {
+  expect(tokenize('%% repeat')[0]).toMatchObject({ type: 'markRepeat' });
+  expect(tokenize('%% repeat while (yes)')[0]).toMatchObject({ type: 'markRepeatWhile', label: 'yes' });
+  expect(tokenize('%% repeat while')[0]).toMatchObject({ type: 'markRepeatWhile', label: undefined });
 });
 
-test('reads loop subgraphs and their trailing label comments', () => {
-  expect(tokenize('subgraph while_a ["while (more?) is (yes)"]')[0])
-    .toMatchObject({ type: 'subgraphWhile', cond: 'more?', isLabel: 'yes' });
-  expect(tokenize('%% endwhile (no)')[0]).toMatchObject({ type: 'endwhileNote', label: 'no' });
-  expect(tokenize('subgraph repeat_a ["repeat"]')[0]).toMatchObject({ type: 'subgraphRepeat' });
-  expect(tokenize('%% repeat while (again?) is (yes)')[0])
-    .toMatchObject({ type: 'repeatWhileNote', cond: 'again?', isLabel: 'yes' });
+test('reads the while markers', () => {
+  expect(tokenize('%% while')[0]).toMatchObject({ type: 'markWhile' });
+  expect(tokenize('%% do (yes)')[0]).toMatchObject({ type: 'markDo', label: 'yes' });
+  expect(tokenize('%% endwhile (no)')[0]).toMatchObject({ type: 'markEndwhile', label: 'no' });
+  expect(tokenize('%% endwhile')[0]).toMatchObject({ type: 'markEndwhile', label: undefined });
 });
 
-test('reads fork and fork-again subgraphs, distinct from a plain `end`', () => {
-  expect(tokenize('subgraph fork_a ["fork"]\nsubgraph forkagain_a_1 ["fork again"]\nend\nend').map((t) => t.type))
-    .toEqual(['subgraphFork', 'subgraphForkAgain', 'end-sub', 'end-sub']);
+test('reads the fork markers', () => {
+  expect(tokenize('%% fork')[0]).toMatchObject({ type: 'markFork' });
+  expect(tokenize('%% fork again')[0]).toMatchObject({ type: 'markForkAgain' });
+  expect(tokenize('%% end fork')[0]).toMatchObject({ type: 'markEndFork' });
 });
+
+test('a bare `end` is no longer a token of this dialect', () => {
+  expect(tokenize('end')[0]).toMatchObject({ type: 'unsupported' });
+});
+
 
 test('reads inline and block notes, stripping the %% marker from the body', () => {
   expect(tokenize('%% note right: hello')[0]).toMatchObject({ type: 'note', side: 'right', text: 'hello' });
@@ -77,4 +82,30 @@ test('classifies structural constructs we cannot represent as unsupported', () =
 
 test('reports 1-based line numbers', () => {
   expect(tokenize('flowchart TD\n\nstart(("start"))\npartition x {')[2]).toMatchObject({ line: 4 });
+});
+
+test('reads a diamond decision node', () => {
+  expect(tokenize('n2{"In stock?"}')[0])
+    .toMatchObject({ type: 'decision', id: 'n2', cond: 'In stock?' });
+});
+
+test('unescapes a condition that carries a quote or a line break', () => {
+  expect(tokenize('n2{"say #quot;hi#quot;"}')[0]).toMatchObject({ cond: 'say "hi"' });
+  expect(tokenize('n2{"first<br/>second"}')[0]).toMatchObject({ cond: 'first\nsecond' });
+});
+
+test('reads a fork bar', () => {
+  expect(tokenize('n8@{ shape: fork }')[0]).toMatchObject({ type: 'forkBar', id: 'n8' });
+  expect(tokenize('join_n8@{shape:fork}')[0]).toMatchObject({ type: 'forkBar', id: 'join_n8' });
+});
+
+test('refuses an extended shape that is not a fork, naming the shape', () => {
+  expect(tokenize('n8@{ shape: cyl }')[0])
+    .toMatchObject({ type: 'unsupported', construct: '@{ shape: cyl }' });
+});
+
+test('reads both labelled edge forms and discards the label', () => {
+  expect(tokenize('a -- yes --> b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
+  expect(tokenize('a -->|yes| b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
+  expect(tokenize('a -->|"a --> b"| b')[0]).toMatchObject({ type: 'edge', from: 'a', to: 'b' });
 });

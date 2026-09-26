@@ -82,12 +82,18 @@ export function parse(text: string): ParseResult {
     return token as Extract<Token, { type: T }>;
   }
 
-  /** A subgraph body: every construct nests as `subgraph ... [...]` ... `end`, so any
-   *  nested sequence just reads blocks until it meets its own closing `end`. */
-  function parseNested(): Block[] {
+  const IF_STOP = new Set<Token['type']>(['markElseif', 'markElse', 'markEndif']);
+  const WHILE_STOP = new Set<Token['type']>(['markEndwhile']);
+  const REPEAT_STOP = new Set<Token['type']>(['markRepeatWhile']);
+  const FORK_STOP = new Set<Token['type']>(['markForkAgain', 'markEndFork']);
+
+  /** A marker-delimited body: read blocks until one of this construct's own closing
+   *  markers, which the caller consumes. A nested construct is consumed whole by the
+   *  recursive `parseBlock`, so the stop set is only ever consulted at block-start
+   *  position — the same property the retired `subgraph`/`end` nesting relied on. */
+  function parseBody(stop: ReadonlySet<Token['type']>): Block[] {
     const out: Block[] = [];
-    while (i < structural.length && peek().type !== 'end-sub') out.push(parseBlock());
-    expect('end-sub', '`end`');
+    while (i < structural.length && !stop.has(peek().type)) out.push(parseBlock());
     return out;
   }
 
@@ -104,37 +110,65 @@ export function parse(text: string): ParseResult {
       }
       case 'stop': return { id: newId(), kind: 'stop' };
       case 'end':  return { id: newId(), kind: 'end' };
-      case 'subgraphIf': {
-        const branches: Branch[] = [{ cond: token.cond, thenLabel: token.thenLabel, body: parseNested() }];
-        while (peek()?.type === 'subgraphElseif') {
-          const head = next() as Extract<Token, { type: 'subgraphElseif' }>;
-          branches.push({ cond: head.cond, thenLabel: head.thenLabel, body: parseNested() });
+      case 'markIf': {
+        const branches: Branch[] = [];
+        for (;;) {
+          const diamond = expect('decision', 'a `{"condition"}` decision node');
+          const then = expect('markThen', '`%% then`');
+          branches.push({ cond: diamond.cond, thenLabel: then.label, body: parseBody(IF_STOP) });
+          if (peek()?.type !== 'markElseif') break;
+          next();
         }
         let elseBody: Block[] | undefined;
         let elseLabel: string | undefined;
-        if (peek()?.type === 'subgraphElse') {
-          const head = next() as Extract<Token, { type: 'subgraphElse' }>;
-          elseLabel = head.label;
-          elseBody = parseNested();
+        if (peek()?.type === 'markElse') {
+          elseLabel = (next() as Extract<Token, { type: 'markElse' }>).label;
+          elseBody = parseBody(IF_STOP);
         }
+        expect('markEndif', '`%% endif`');
         return { id: newId(), kind: 'if', branches, elseBody, elseLabel };
       }
-      case 'subgraphWhile': {
-        const body = parseNested();
-        let endLabel: string | undefined;
-        if (peek()?.type === 'endwhileNote') {
-          endLabel = (next() as Extract<Token, { type: 'endwhileNote' }>).label;
+      case 'decision':
+      case 'forkBar':
+        throw new Fail({ kind: 'syntax', line: token.line,
+          message: 'A `{...}` decision must follow `%% if`, `%% elseif`, `%% while` or `%% repeat while`.' });
+      case 'markWhile': {
+        const diamond = expect('decision', 'a `{"condition"}` decision node');
+        const doMark = expect('markDo', '`%% do`');
+        const body = parseBody(WHILE_STOP);
+        const close = expect('markEndwhile', '`%% endwhile`');
+        return { id: newId(), kind: 'while', cond: diamond.cond,
+                 isLabel: doMark.label, endLabel: close.label, body };
+      }
+      case 'markRepeat': {
+        const body = parseBody(REPEAT_STOP);
+        const close = expect('markRepeatWhile', '`%% repeat while`');
+        const diamond = expect('decision', 'a `{"condition"}` decision node');
+        return { id: newId(), kind: 'repeat', body, cond: diamond.cond, isLabel: close.label };
+      }
+      case 'markFork': {
+        expect('forkBar', 'a `@{ shape: fork }` split bar');
+        const branches: Block[][] = [parseBody(FORK_STOP)];
+        while (peek()?.type === 'markForkAgain') { next(); branches.push(parseBody(FORK_STOP)); }
+        expect('markEndFork', '`%% end fork`');
+        expect('forkBar', 'a `@{ shape: fork }` join bar');
+        // Every other missing marker is caught by an `expect` above. A dropped
+        // `%% fork again` is the one that would not be: its column would simply be
+        // absorbed into the previous one, silently turning parallel work into
+        // sequential. Counting is not enough on its own -- losing one column of three
+        // still leaves a plausible two -- so the opening marker carries the column count
+        // and it has to match exactly. A file written without the count (hand-written to
+        // an older spelling of this dialect) falls back to the weaker `at least two`.
+        if (token.count !== undefined) {
+          if (branches.length !== token.count) {
+            throw new Fail({ kind: 'syntax', line: token.line,
+              message: `This fork declares ${token.count} branches but has ${branches.length}; `
+                + 'a `%% fork again` is missing.' });
+          }
+        } else if (branches.length < 2) {
+          throw new Fail({ kind: 'syntax', line: token.line,
+            message: 'A fork needs at least two branches; a `%% fork again` is missing.' });
         }
-        return { id: newId(), kind: 'while', cond: token.cond, isLabel: token.isLabel, endLabel, body };
-      }
-      case 'subgraphRepeat': {
-        const body = parseNested();
-        const close = expect('repeatWhileNote', '`%% repeat while (cond) is (label)`');
-        return { id: newId(), kind: 'repeat', body, cond: close.cond, isLabel: close.isLabel };
-      }
-      case 'subgraphFork': {
-        const branches: Block[][] = [parseNested()];
-        while (peek()?.type === 'subgraphForkAgain') { next(); branches.push(parseNested()); }
         return { id: newId(), kind: 'fork', branches };
       }
       default:

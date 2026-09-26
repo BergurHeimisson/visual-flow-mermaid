@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import { parse } from './parse';
 import { serialize } from './serialize';
+// Imported as text rather than read from disk: keeps the test free of node builtins, which
+// this project has no `@types/node` for, and pins the fixtures at build time.
+import simpleFixture from '../../e2e/fixtures/simple.mmd?raw';
+import terminatorFixture from '../../e2e/fixtures/terminator.mmd?raw';
 
 function ok(text: string) {
   const r = parse(text);
@@ -11,8 +15,8 @@ function ok(text: string) {
 test('parses a decision into branches and an else arm', () => {
   const doc = ok(
     'flowchart TD\nstart(("start"))\na["A"]\n'
-    + 'subgraph if_x ["if (c?) then (yes)"]\n  b["B"]\nend\n'
-    + 'subgraph else_x ["else (no)"]\n  c["C"]\nend\n'
+    + '%% if\nx{"c?"}\n%% then (yes)\n  b["B"]\n'
+    + '%% else (no)\n  c["C"]\n%% endif\n'
     + 's1(("stop"))\n',
   ).doc;
   expect(doc.body).toHaveLength(3);
@@ -26,22 +30,39 @@ test('parses a decision into branches and an else arm', () => {
 test('parses elseif chains in order', () => {
   const doc = ok(
     'start(("start"))\n'
-    + 'subgraph if_x ["if (a?) then"]\n  a["A"]\nend\n'
-    + 'subgraph elseif_x_1 ["elseif (b?) then"]\n  b["B"]\nend\n',
+    + '%% if\nx{"a?"}\n%% then\n  a["A"]\n'
+    + '%% elseif\ny{"b?"}\n%% then\n  b["B"]\n%% endif\n',
   ).doc;
   const block = doc.body[0];
   expect(block.kind === 'if' && block.branches.map((b) => b.cond)).toEqual(['a?', 'b?']);
 });
 
+test('refuses a diamond that does not follow an opening marker', () => {
+  const r = parse('start(("start"))\nx{"c?"}\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/decision must follow/i);
+});
+
 test('parses loops and fork', () => {
   const doc = ok(
     'start(("start"))\n'
-    + 'subgraph while_x ["while (m?) is (yes)"]\n  r["r"]\nend\n%% endwhile (no)\n'
-    + 'subgraph repeat_x ["repeat"]\n  p["p"]\nend\n%% repeat while (a?)\n'
-    + 'subgraph fork_x ["fork"]\n  l["l"]\nend\n'
-    + 'subgraph forkagain_x_1 ["fork again"]\n  r2["r"]\nend\n',
+    + '%% while\nw{"m?"}\n%% do (yes)\n  r["r"]\n%% endwhile (no)\n'
+    + '%% repeat\n  p["p"]\n%% repeat while (yes)\nrw{"a?"}\n'
+    + '%% fork\nf@{ shape: fork }\n  l["l"]\n%% fork again\n  r2["r"]\n%% end fork\njoin_f@{ shape: fork }\n',
   ).doc;
   expect(doc.body.map((b) => b.kind)).toEqual(['while', 'repeat', 'fork']);
+});
+
+test('refuses an old-dialect subgraph file rather than half-parsing it', () => {
+  const r = parse(
+    'flowchart TD\nstart(("start"))\nsubgraph if_a ["if (c?) then (yes)"]\n  b["B"]\nend\n',
+  );
+  expect(r.ok).toBe(false);
+  if (!r.ok) {
+    expect(r.error.kind).toBe('unsupported');
+    expect(r.error.message).toMatch(/subgraph is not supported/i);
+    expect(r.error.line).toBe(3);
+  }
 });
 
 test('attaches a note to the activity it follows', () => {
@@ -71,7 +92,7 @@ test('refuses a structural construct it cannot represent', () => {
 });
 
 test('reports a syntax error for an unclosed decision', () => {
-  const r = parse('start(("start"))\nsubgraph if_x ["if (c?) then"]\n  a["A"]\n');
+  const r = parse('start(("start"))\n%% if\nx{"c?"}\n%% then\n  a["A"]\n');
   expect(r.ok).toBe(false);
   if (!r.ok) expect(r.error.kind).toBe('syntax');
 });
@@ -92,12 +113,12 @@ test('round-trips a document written by the serializer', () => {
 });
 
 test('refuses an unsupported construct nested deep inside an if inside a while', () => {
-  const text = 'start(("start"))\nsubgraph while_x ["while (m?) is (yes)"]\n'
-    + 'subgraph if_x ["if (c?) then"]\npartition "P" {\na["A"]\n}\nend\nend\n';
+  const text = 'start(("start"))\n%% while\nw{"m?"}\n%% do (yes)\n'
+    + '%% if\nx{"c?"}\n%% then\npartition "P" {\na["A"]\n}\n%% endif\n%% endwhile\n';
   const r = parse(text);
   expect(r.ok).toBe(false);
   if (!r.ok) {
-    expect(r.error).toMatchObject({ kind: 'unsupported', line: 4, construct: 'partition' });
+    expect(r.error).toMatchObject({ kind: 'unsupported', line: 8, construct: 'partition' });
   }
 });
 
@@ -117,7 +138,7 @@ test('reports a syntax error for a stray note rather than dropping it', () => {
   expect(first.ok).toBe(false);
   if (!first.ok) expect(first.error.kind).toBe('syntax');
 
-  const afterIf = parse('start(("start"))\nsubgraph if_x ["if (c?) then"]\n  a["A"]\nend\n%% note right: hi\n');
+  const afterIf = parse('start(("start"))\n%% if\nx{"c?"}\n%% then\n  a["A"]\n%% endif\n%% note right: hi\n');
   expect(afterIf.ok).toBe(false);
   if (!afterIf.ok) expect(afterIf.error.kind).toBe('syntax');
 
@@ -126,27 +147,34 @@ test('reports a syntax error for a stray note rather than dropping it', () => {
   if (!afterStop.ok) expect(afterStop.error.kind).toBe('syntax');
 });
 
-test('reports a syntax error for a stray closing `end` at the top level', () => {
+// `end` used to close a subgraph. Now that nesting is carried by markers it is simply
+// old-dialect syntax, so it is refused by name rather than parsed as a terminator.
+test('refuses a stray closing `end` at the top level', () => {
   const r = parse('start(("start"))\na["A"]\nend\n');
   expect(r.ok).toBe(false);
-  if (!r.ok) expect(r.error.kind).toBe('syntax');
+  if (!r.ok) {
+    expect(r.error.kind).toBe('unsupported');
+    expect(r.error.line).toBe(3);
+  }
 });
 
 test('reports the last real token line for an unterminated if, not a hardcoded 1', () => {
-  const r = parse('start(("start"))\nsubgraph if_x ["if (c?) then"]\n  a["A"]\n');
+  const r = parse('start(("start"))\n%% if\nx{"c?"}\n%% then\n  a["A"]\n');
   expect(r.ok).toBe(false);
   if (!r.ok) {
     expect(r.error.kind).toBe('syntax');
     expect(r.error.line).toBeGreaterThan(1);
-    expect(r.error.line).toBe(3);
+    expect(r.error.line).toBe(5);
   }
 
-  const nested = parse('start(("start"))\nsubgraph if_x ["if (a?) then"]\nsubgraph if_y ["if (b?) then"]\n  a["A"]\n');
+  const nested = parse(
+    'start(("start"))\n%% if\nx{"a?"}\n%% then\n%% if\ny{"b?"}\n%% then\n  a["A"]\n',
+  );
   expect(nested.ok).toBe(false);
   if (!nested.ok) {
     expect(nested.error.kind).toBe('syntax');
     expect(nested.error.line).toBeGreaterThan(1);
-    expect(nested.error.line).toBe(4);
+    expect(nested.error.line).toBe(8);
   }
 });
 
@@ -171,5 +199,81 @@ test('refuses a file containing a second flowchart declaration', () => {
   if (!r.ok) {
     expect(r.error.line).toBe(4);
     expect(r.error.message).toMatch(/one diagram|multiple/i);
+  }
+});
+
+// --- The markers ARE the structure ----------------------------------------------------
+//
+// A marker that goes missing cannot be detected by spelling: `%% endwile` opens with no
+// keyword this dialect knows. What protects the document instead is that every marker a
+// construct needs is `expect`ed, so its absence refuses loudly. These tests pin that.
+// The one case `expect` cannot catch is a dropped `%% fork again`, which would silently
+// merge two parallel columns into one — so a fork is refused unless it has two branches.
+
+test('a missing `%% then` refuses rather than guessing', () => {
+  const r = parse('start(("start"))\n%% if\nx{"c?"}\n  a["A"]\n%% endif\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/%% then/);
+});
+
+test('a missing `%% endwhile` refuses rather than running to end of file', () => {
+  const r = parse('start(("start"))\n%% while\nw{"m?"}\n%% do\n  a["A"]\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/%% endwhile/);
+});
+
+test('a missing `%% repeat while` refuses rather than dropping the condition', () => {
+  const r = parse('start(("start"))\n%% repeat\n  a["A"]\n');
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/%% repeat while/);
+});
+
+test('a fork whose `%% fork again` went missing is refused, not silently merged', () => {
+  const r = parse(
+    'start(("start"))\n%% fork (2)\nf@{ shape: fork }\n  a["A"]\n  b["B"]\n'
+    + '%% end fork\njoin_f@{ shape: fork }\n',
+  );
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/2 branches|fork again/i);
+});
+
+// A count check, not a plausibility check: dropping one `%% fork again` from a three-column
+// fork leaves two columns, which a `>= 2` guard would happily accept while one parallel
+// task had silently been appended to another.
+test('a three-column fork that lost one `%% fork again` is refused', () => {
+  const r = parse(
+    'start(("start"))\n%% fork (3)\nf@{ shape: fork }\n  a["F"]\n  b["G"]\n'
+    + '%% fork again\n  c["H"]\n%% end fork\njoin_f@{ shape: fork }\n',
+  );
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.message).toMatch(/3 branches/i);
+});
+
+test('a fork with its full complement of columns parses', () => {
+  const doc = ok(
+    'start(("start"))\n%% fork (3)\nf@{ shape: fork }\n  a["F"]\n'
+    + '%% fork again\n  b["G"]\n%% fork again\n  c["H"]\n%% end fork\njoin_f@{ shape: fork }\n',
+  ).doc;
+  const block = doc.body[0];
+  expect(block.kind === 'fork' && block.branches).toHaveLength(3);
+});
+
+// The e2e fixtures are hand-written in this dialect. Checking them here means the fast
+// suite catches drift, rather than a Playwright run several minutes later.
+test('both e2e fixtures parse in the current dialect', () => {
+  for (const [name, text] of [['simple', simpleFixture], ['terminator', terminatorFixture]] as const) {
+    const r = parse(text);
+    expect(r.ok, `${name}: ${r.ok ? '' : `${r.error.message} (line ${r.error.line})`}`).toBe(true);
+  }
+});
+
+test('an ordinary comment that opens with a marker keyword stays a comment', () => {
+  // `%% do not edit` and `%% if you change this` both open with a marker keyword. Treating
+  // a keyword prefix as reserved would refuse these outright, so the dialect does not.
+  const r = parse('%% do not edit\n%% if you change this, re-export it\nstart(("start"))\na["A"]\n');
+  expect(r.ok).toBe(true);
+  if (r.ok) {
+    expect(r.doc.preamble).toEqual(['%% do not edit', '%% if you change this, re-export it']);
+    expect(serialize(r.doc)).toContain('%% do not edit\n%% if you change this, re-export it\n');
   }
 });
